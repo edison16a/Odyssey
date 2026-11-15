@@ -6,7 +6,7 @@
 // ready, opens the 3D view. Everything goes through Convex.
 
 import { mutation, query } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -20,11 +20,20 @@ function checkWorker(key: string) {
 /** A claimed scan that has not reported for this long goes back in the queue. */
 const STALE_MS = 10 * 60 * 1000;
 
-async function present(ctx: QueryCtx, scan: Doc<"scans">) {
+/** Whether this phone may delete the scan. Scans from before owners were recorded belong to nobody, so anyone may. */
+function ownedBy(scan: Doc<"scans">, owner: string | undefined) {
+  return scan.ownerKey === undefined || (owner !== undefined && scan.ownerKey === owner);
+}
+
+async function present(ctx: QueryCtx, scan: Doc<"scans">, owner?: string) {
   return {
     id: scan._id,
     placeId: scan.placeId,
     placeName: scan.placeName,
+    name: scan.name ?? scan.placeName,
+    creatorName: scan.creatorName,
+    mine: ownedBy(scan, owner),
+    replaces: scan.replaces,
     status: scan.status,
     message: scan.message,
     progress: scan.progress,
@@ -37,6 +46,17 @@ async function present(ctx: QueryCtx, scan: Doc<"scans">) {
   };
 }
 
+/** Delete a scan and its files. The video is kept while another scan was built from it. */
+async function erase(ctx: MutationCtx, scan: Doc<"scans">) {
+  await ctx.db.delete(scan._id);
+  if (scan.modelId) await ctx.storage.delete(scan.modelId);
+  const siblings = await ctx.db
+    .query("scans")
+    .withIndex("by_place", (q) => q.eq("placeId", scan.placeId))
+    .collect();
+  if (!siblings.some((other) => other.videoId === scan.videoId)) await ctx.storage.delete(scan.videoId);
+}
+
 // ── The phone ──────────────────────────────────────────────────────────
 
 /** A one-time URL to upload the walkthrough video to. */
@@ -45,21 +65,26 @@ export const generateUploadUrl = mutation({
   handler: async (ctx) => await ctx.storage.generateUploadUrl(),
 });
 
-/** Queue a scan of a place from an uploaded video. */
+/** Queue a scan of a place from an uploaded video. A place can have many: one per room or floor. */
 export const create = mutation({
   args: {
     placeId: v.string(),
     placeName: v.string(),
+    name: v.optional(v.string()),
+    creatorName: v.optional(v.string()),
+    owner: v.optional(v.string()),
     lat: v.number(),
     lng: v.number(),
     videoId: v.id("_storage"),
     seconds: v.number(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { owner, name, ...args }) => {
     const userId = await getAuthUserId(ctx);
     const now = Date.now();
     return await ctx.db.insert("scans", {
       ...args,
+      name: name?.trim().slice(0, 40) || undefined,
+      ownerKey: owner,
       userId: userId ?? undefined,
       status: "queued",
       message: "Waiting for a render computer",
@@ -70,33 +95,56 @@ export const create = mutation({
   },
 });
 
-export const get = query({
-  args: { id: v.id("scans") },
-  handler: async (ctx, { id }) => {
+/** Delete a scan. Only the phone that made it may. */
+export const remove = mutation({
+  args: { id: v.id("scans"), owner: v.string() },
+  handler: async (ctx, { id, owner }) => {
     const scan = await ctx.db.get(id);
-    return scan ? await present(ctx, scan) : null;
+    if (!scan) return;
+    if (!ownedBy(scan, owner)) throw new Error("Only the explorer who made this scan can delete it");
+    await erase(ctx, scan);
+  },
+});
+
+/** Rename a scan. Only the phone that made it may. */
+export const rename = mutation({
+  args: { id: v.id("scans"), owner: v.string(), name: v.string() },
+  handler: async (ctx, { id, owner, name }) => {
+    const scan = await ctx.db.get(id);
+    if (!scan) return;
+    if (!ownedBy(scan, owner)) throw new Error("Only the explorer who made this scan can rename it");
+    const clean = name.trim().slice(0, 40);
+    if (clean) await ctx.db.patch(id, { name: clean });
+  },
+});
+
+export const get = query({
+  args: { id: v.id("scans"), owner: v.optional(v.string()) },
+  handler: async (ctx, { id, owner }) => {
+    const scan = await ctx.db.get(id);
+    return scan ? await present(ctx, scan, owner) : null;
   },
 });
 
 /** The scans of one place, newest first. */
 export const forPlace = query({
-  args: { placeId: v.string() },
-  handler: async (ctx, { placeId }) => {
+  args: { placeId: v.string(), owner: v.optional(v.string()) },
+  handler: async (ctx, { placeId, owner }) => {
     const rows = await ctx.db
       .query("scans")
       .withIndex("by_place", (q) => q.eq("placeId", placeId))
       .order("desc")
-      .take(10);
-    return await Promise.all(rows.map((r) => present(ctx, r)));
+      .take(30);
+    return await Promise.all(rows.map((r) => present(ctx, r, owner)));
   },
 });
 
 /** The latest scans anywhere, so the map can show which places have a 3D view. */
 export const recent = query({
-  args: {},
-  handler: async (ctx) => {
-    const rows = await ctx.db.query("scans").order("desc").take(50);
-    return await Promise.all(rows.map((r) => present(ctx, r)));
+  args: { owner: v.optional(v.string()) },
+  handler: async (ctx, { owner }) => {
+    const rows = await ctx.db.query("scans").order("desc").take(100);
+    return await Promise.all(rows.map((r) => present(ctx, r, owner)));
   },
 });
 
@@ -131,6 +179,7 @@ export const claim = mutation({
     return {
       id: scan._id,
       placeName: scan.placeName,
+      name: scan.name ?? scan.placeName,
       seconds: scan.seconds,
       videoUrl: await ctx.storage.getUrl(scan.videoId),
     };
@@ -142,7 +191,9 @@ export const report = mutation({
   args: { key: v.string(), id: v.id("scans"), message: v.string(), progress: v.number() },
   handler: async (ctx, { key, id, message, progress }) => {
     checkWorker(key);
+    if (!(await ctx.db.get(id))) return false; // deleted: the worker can stop
     await ctx.db.patch(id, { status: "processing", message, progress, updatedAt: Date.now() });
+    return true;
   },
 });
 
@@ -165,6 +216,8 @@ export const complete = mutation({
   },
   handler: async (ctx, { key, id, modelId, meta, splats }) => {
     checkWorker(key);
+    const scan = await ctx.db.get(id);
+    if (!scan) return; // deleted while it was being built
     await ctx.db.patch(id, {
       status: "ready",
       message: "Ready to explore",
@@ -174,6 +227,9 @@ export const complete = mutation({
       splats,
       updatedAt: Date.now(),
     });
+    // A re-render takes the place of the scan it was made from.
+    const older = scan.replaces ? await ctx.db.get(scan.replaces) : null;
+    if (older) await erase(ctx, older);
   },
 });
 
@@ -181,6 +237,7 @@ export const fail = mutation({
   args: { key: v.string(), id: v.id("scans"), message: v.string() },
   handler: async (ctx, { key, id, message }) => {
     checkWorker(key);
+    if (!(await ctx.db.get(id))) return;
     await ctx.db.patch(id, { status: "failed", message, updatedAt: Date.now() });
   },
 });
@@ -197,6 +254,10 @@ export const rerender = mutation({
       userId: old.userId,
       placeId: old.placeId,
       placeName: old.placeName,
+      name: old.name,
+      creatorName: old.creatorName,
+      ownerKey: old.ownerKey,
+      replaces: old._id,
       lat: old.lat,
       lng: old.lng,
       videoId: old.videoId,

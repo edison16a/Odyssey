@@ -70,6 +70,7 @@ class Reporter:
     def __init__(self, scan_id):
         self.scan_id, self.message, self.progress = scan_id, "Starting", 0.02
         self.done = threading.Event()
+        self.deleted = False  # the explorer deleted the scan while it was being built
         if scan_id:
             threading.Thread(target=self._beat, daemon=True).start()
 
@@ -77,12 +78,16 @@ class Reporter:
         self.message, self.progress = message, progress
         print(f"  [{progress * 100:3.0f}%] {message}", flush=True)
         self._send()
+        if self.deleted:
+            raise ScanError("This scan was deleted.")
 
     def _send(self):
         if not self.scan_id:
             return
         try:
-            convex("mutation", "scans:report", {"key": KEY, "id": self.scan_id, "message": self.message, "progress": self.progress})
+            alive = convex("mutation", "scans:report", {"key": KEY, "id": self.scan_id, "message": self.message, "progress": self.progress})
+            if alive is False:
+                self.deleted = True
         except Exception as e:  # a dropped report must never stop a render
             print(f"  (could not report: {e})", flush=True)
 
@@ -276,7 +281,7 @@ def build(video, work, say):
 
 def work_on(job):
     scan_id = job["id"]
-    print(f"\nScan {scan_id}: {job['placeName']} ({job['seconds']:.0f} s)", flush=True)
+    print(f"\nScan {scan_id}: {job.get('name') or job['placeName']} at {job['placeName']} ({job['seconds']:.0f} s)", flush=True)
     say = Reporter(scan_id)
     work = tempfile.mkdtemp(prefix="odyssey-scan-")
     try:

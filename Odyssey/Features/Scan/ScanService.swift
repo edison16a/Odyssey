@@ -18,6 +18,11 @@ nonisolated struct Scan: Identifiable, Hashable, Sendable {
     var id: String
     var placeID: String
     var placeName: String
+    /// What the explorer called this space: "Main hall", "Kitchen". A place can have several.
+    var name: String
+    var creatorName: String?
+    /// Whether this phone made the scan, and so may delete or rename it.
+    var mine: Bool
     /// "queued", "processing", "ready" or "failed".
     var status: String
     /// What is happening right now, written by the render computer.
@@ -38,6 +43,9 @@ nonisolated struct Scan: Identifiable, Hashable, Sendable {
         self.id = id
         self.placeID = placeID
         placeName = json["placeName"] as? String ?? ""
+        name = json["name"] as? String ?? placeName
+        creatorName = json["creatorName"] as? String
+        mine = json["mine"] as? Bool ?? false
         status = json["status"] as? String ?? "queued"
         message = json["message"] as? String ?? ""
         progress = (json["progress"] as? NSNumber)?.doubleValue ?? 0
@@ -103,16 +111,31 @@ final class ScanService {
 
     // MARK: Reading
 
-    /// The newest finished scan of a place.
-    func ready(for placeID: String) -> Scan? { scans.first { $0.placeID == placeID && $0.isReady } }
+    /// This phone's private key for the scans it makes. Convex only lets the phone that made a scan delete it.
+    @ObservationIgnored private(set) lazy var ownerKey: String = {
+        let defaults = UserDefaults.standard
+        if let key = defaults.string(forKey: "scan.ownerKey") { return key }
+        let key = UUID().uuidString
+        defaults.set(key, forKey: "scan.ownerKey")
+        return key
+    }()
 
-    /// A scan of this place that is waiting or being built.
-    func working(for placeID: String) -> Scan? { scans.first { $0.placeID == placeID && $0.isWorking } }
+    /// The finished 3D spaces of a place, newest first.
+    func spaces(for placeID: String) -> [Scan] { scans.filter { $0.placeID == placeID && $0.isReady } }
+
+    /// The scans of this place that are waiting or being built.
+    func building(for placeID: String) -> [Scan] { scans.filter { $0.placeID == placeID && $0.isWorking } }
 
     /// The newest scan of this place, if it failed.
     func failed(for placeID: String) -> Scan? {
         guard let newest = scans.first(where: { $0.placeID == placeID }), newest.isFailed else { return nil }
         return newest
+    }
+
+    /// A name for the next space at a place: "Main space" for the first, then "Space 2", "Space 3".
+    func suggestedName(for placeID: String) -> String {
+        let count = scans.filter { $0.placeID == placeID && !$0.isFailed }.count
+        return count == 0 ? "Main space" : "Space \(count + 1)"
     }
 
     func scan(_ id: String) -> Scan? { scans.first { $0.id == id } }
@@ -131,7 +154,7 @@ final class ScanService {
     }
 
     func refresh() async {
-        guard let rows = try? await call("query", "scans:recent") as? [[String: Any]] else { return }
+        guard let rows = try? await call("query", "scans:recent", ["owner": ownerKey]) as? [[String: Any]] else { return }
         let next = rows.compactMap(Scan.init)
         if next != scans { scans = next }
     }
@@ -139,7 +162,7 @@ final class ScanService {
     // MARK: Sending a video
 
     /// Re-encode the video, upload it and queue the scan. `step` reports what is happening and how far along it is.
-    func submit(video: URL, place: Place, step: @escaping (String, Double) -> Void) async throws -> String {
+    func submit(video: URL, place: Place, name: String, creator: String, step: @escaping (String, Double) -> Void) async throws -> String {
         let asset = AVURLAsset(url: video)
         let seconds = (try? await asset.load(.duration).seconds) ?? 0
         guard seconds >= ScanService.minimumSeconds - 1 else { throw ScanError.tooShort }
@@ -167,6 +190,7 @@ final class ScanService {
         step("Almost there", 0.97)
         let created = try await call("mutation", "scans:create", [
             "placeId": place.id, "placeName": place.name,
+            "name": name, "creatorName": creator, "owner": ownerKey,
             "lat": place.coords.lat, "lng": place.coords.lng,
             "videoId": storageID, "seconds": seconds,
         ])
@@ -186,6 +210,21 @@ final class ScanService {
         } catch {
             return nil
         }
+    }
+
+    // MARK: Changing a scan (only the phone that made it)
+
+    func delete(_ scan: Scan) async throws {
+        _ = try await call("mutation", "scans:remove", ["id": scan.id, "owner": ownerKey])
+        scans.removeAll { $0.id == scan.id }
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("scans", isDirectory: true)
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent("\(scan.id).bin"))
+        await refresh()
+    }
+
+    func rename(_ scan: Scan, to name: String) async throws {
+        _ = try await call("mutation", "scans:rename", ["id": scan.id, "owner": ownerKey, "name": name])
+        await refresh()
     }
 
     // MARK: The finished space

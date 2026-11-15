@@ -20,6 +20,7 @@ struct ScanFlow: View {
 
     private enum Stage: Equatable {
         case record
+        case naming(video: URL)
         case sending
         case building(scanID: String)
         case problem(String)
@@ -27,6 +28,7 @@ struct ScanFlow: View {
 
     @State private var stage: Stage = .record
     @State private var place: Place?
+    @State private var spaceName = ""
     @State private var sendingText = "Getting your video ready"
     @State private var sendingProgress = 0.0
     private let scans = ScanService.shared
@@ -70,7 +72,12 @@ struct ScanFlow: View {
     @ViewBuilder private var content: some View {
         switch stage {
         case .record:
-            ScanRecorder { video in send(video) }
+            ScanRecorder { video in
+                if spaceName.isEmpty, let place { spaceName = scans.suggestedName(for: place.id) }
+                withAnimation(.easeInOut(duration: 0.3)) { stage = .naming(video: video) }
+            }
+        case .naming(let video):
+            ScanNameStep(placeName: place?.name ?? "this place", name: $spaceName) { send(video) }
         case .sending:
             ScanStatusScreen(title: "Sending your video", message: sendingText, progress: sendingProgress,
                              note: "Keep Odyssey open until the video is sent.")
@@ -94,7 +101,7 @@ struct ScanFlow: View {
                 Spacer()
                 GlobieView(mood: .happy, form: store.streakTier.id, size: 110)
                 Text("Your 3D space is ready").font(.system(size: 24, weight: .bold)).tracking(-0.4)
-                Text("\(place?.name ?? scan.placeName) can now be explored from anywhere.")
+                Text("\(scan.name) at \(place?.name ?? scan.placeName) can now be explored from anywhere.")
                     .mutedStyle(15).multilineTextAlignment(.center)
                 Spacer()
                 Button {
@@ -131,7 +138,9 @@ struct ScanFlow: View {
         withAnimation(.easeInOut(duration: 0.3)) { stage = .sending }
         Task {
             do {
-                let id = try await scans.submit(video: video, place: place) { text, fraction in
+                let typed = spaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = typed.isEmpty ? scans.suggestedName(for: place.id) : typed
+                let id = try await scans.submit(video: video, place: place, name: name, creator: store.me.name) { text, fraction in
                     sendingText = text
                     sendingProgress = fraction
                 }
@@ -142,6 +151,57 @@ struct ScanFlow: View {
             }
             try? FileManager.default.removeItem(at: video)
         }
+    }
+}
+
+/// After filming: give the space a name. A place can have several, so the name says which part this is.
+struct ScanNameStep: View {
+    var placeName: String
+    @Binding var name: String
+    var onStart: () -> Void
+    @FocusState private var typing: Bool
+
+    private static let ideas = ["Entrance", "Main hall", "Kitchen", "Upstairs", "Downstairs", "Outside"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Name this space").font(.system(size: 24, weight: .bold)).tracking(-0.4).padding(.top, 8)
+            Text("\(placeName) can have several 3D spaces: a room, a floor, the courtyard. The name tells explorers which one this is.")
+                .mutedStyle(15)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("Main hall", text: $name)
+                .font(.system(size: 17, weight: .semibold))
+                .textInputAutocapitalization(.sentences)
+                .submitLabel(.done)
+                .focused($typing)
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                .onChange(of: name) { _, value in
+                    if value.count > 40 { name = String(value.prefix(40)) }
+                }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ScanNameStep.ideas, id: \.self) { idea in
+                        Button(idea) {
+                            Haptics.tap()
+                            name = idea
+                        }
+                        .buttonStyle(.pill(name == idea ? .primary : .soft, height: 36))
+                    }
+                }
+            }
+            Spacer()
+            Button {
+                typing = false
+                onStart()
+            } label: {
+                Label("Build 3D space", systemImage: "cube.transparent")
+            }
+            .buttonStyle(.pill(.accent, fill: true))
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

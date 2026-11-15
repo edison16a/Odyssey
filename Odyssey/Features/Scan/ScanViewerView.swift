@@ -93,7 +93,7 @@ struct ScanViewerView: View {
             phase = .failed("This scan is not ready yet.")
             return
         }
-        name = scan.placeName
+        name = scan.name == scan.placeName ? scan.placeName : "\(scan.name) · \(scan.placeName)"
         do {
             let file = try await scans.modelFile(for: scan)
             phase = .ready(model: file, meta: meta)
@@ -183,59 +183,134 @@ private struct ScanWebView: UIViewRepresentable {
     }
 }
 
-/// On a place: open its 3D space, show how the build is going, or offer to scan it.
+/// On a place: its 3D spaces (there can be several, each with a name), the ones being built,
+/// and a button to add another. The explorer who made a space can rename or delete it.
 struct ScanPlaceRow: View {
     @Environment(AppRouter.self) private var router
+    @Environment(ToastCenter.self) private var toast
     var place: Place
     /// Called before a cover is presented, to close the sheet this row sits in.
     var before: (() -> Void)?
     private let scans = ScanService.shared
 
+    @State private var deleting: Scan?
+    @State private var renaming: Scan?
+    @State private var newName = ""
+
     var body: some View {
-        let ready = scans.ready(for: place.id)
-        let working = scans.working(for: place.id)
+        let spaces = scans.spaces(for: place.id)
+        let building = scans.building(for: place.id)
         VStack(spacing: 8) {
-            if let ready {
-                Button { open(.scanViewer(scanID: ready.id)) } label: {
-                    row(icon: "cube.transparent.fill", tint: Palette.accent,
-                        title: "Walk around in 3D",
-                        detail: "Explore the inside of \(place.name) from here",
-                        trailing: AnyView(Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))))
-                }
-                .buttonStyle(PressStyle())
+            ForEach(spaces) { space in
+                row(icon: "cube.transparent.fill", tint: Palette.accent, title: space.name,
+                    detail: space.creatorName.map { "3D space by \($0)" } ?? "Walk around in 3D",
+                    scan: space) { open(.scanViewer(scanID: space.id)) }
             }
-            if let working {
-                row(icon: "hammer.fill", tint: Palette.ink,
-                    title: ready == nil ? "Building the 3D view" : "Building a newer 3D view",
-                    detail: working.message,
-                    trailing: AnyView(Text("\(Int((working.progress * 100).rounded()))%").font(.system(size: 13, weight: .bold)).monospacedDigit()))
-            } else if ready == nil {
-                Button { open(.scan(placeID: place.id)) } label: {
-                    row(icon: "video.fill", tint: Palette.ink,
-                        title: "Scan this place in 3D",
-                        detail: scans.failed(for: place.id)?.message ?? "Film a short walk and others can explore it",
-                        trailing: AnyView(Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))))
-                }
-                .buttonStyle(PressStyle())
+            ForEach(building) { scan in
+                row(icon: "hammer.fill", tint: Palette.ink, title: "Building \(scan.name)",
+                    detail: "\(Int((scan.progress * 100).rounded()))% · \(scan.message)", scan: scan, action: nil)
             }
+            Button { open(.scan(placeID: place.id)) } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(Palette.ink, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(spaces.isEmpty && building.isEmpty ? "Scan this place in 3D" : "Add another 3D space")
+                            .font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
+                        Text(scans.failed(for: place.id)?.message ?? "Film a short walk and others can explore it")
+                            .font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2)
+                    }
+                    .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            }
+            .buttonStyle(PressStyle())
         }
         .onAppear { scans.watch() }
+        .confirmationDialog("Delete \(deleting?.name ?? "this space")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete 3D space", role: .destructive) {
+                guard let scan = deleting else { return }
+                Task {
+                    do {
+                        try await scans.delete(scan)
+                        toast.show("\(scan.name) was deleted", icon: "trash")
+                    } catch {
+                        toast.show(error.localizedDescription, icon: "exclamationmark.triangle")
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It is removed for everyone and cannot be brought back.")
+        }
+        .alert("Rename 3D space", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Save") {
+                guard let scan = renaming else { return }
+                let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                Task {
+                    do { try await scans.rename(scan, to: name) } catch { toast.show(error.localizedDescription, icon: "exclamationmark.triangle") }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
-    private func row(icon: String, tint: Color, title: String, detail: String, trailing: AnyView) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 42, height: 42)
-                .background(tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
-                Text(detail).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2)
+    /// One space: tap the row to open it. Whoever made it gets a menu to rename or delete it.
+    private func row(icon: String, tint: Color, title: String, detail: String, scan: Scan, action: (() -> Void)?) -> some View {
+        HStack(spacing: 4) {
+            Button { action?() } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(detail).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2)
+                    }
+                    .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                    if action != nil, !scan.mine {
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+                    }
+                }
+                .contentShape(Rectangle())
             }
-            .multilineTextAlignment(.leading)
-            Spacer(minLength: 0)
-            trailing.foregroundStyle(Palette.muted)
+            .buttonStyle(PressStyle())
+            .disabled(action == nil)
+            if scan.mine {
+                Menu {
+                    if scan.isReady {
+                        Button {
+                            newName = scan.name
+                            renaming = scan
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                    }
+                    Button(role: .destructive) { deleting = scan } label: {
+                        Label(scan.isReady ? "Delete" : "Stop and delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Palette.muted)
+                        .frame(width: 40, height: 42)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("More for \(scan.name)")
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

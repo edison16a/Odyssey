@@ -266,6 +266,12 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
     placeId: v.string(),
     placeName: v.string(),
+    name: v.optional(v.string()), // what the explorer called this space: "Main hall", "Kitchen"
+    creatorName: v.optional(v.string()),
+    // Scans are made without signing in, so the phone that made one proves it with a private key.
+    // Only that phone may delete the scan. Never sent back to other phones.
+    ownerKey: v.optional(v.string()),
+    replaces: v.optional(v.id("scans")), // a re-render: the older scan goes when this one is ready
     lat: v.number(),
     lng: v.number(),
     videoId: v.id("_storage"),
