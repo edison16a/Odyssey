@@ -89,6 +89,9 @@ struct ScanViewerView: View {
     private func load() async {
         scans.watch()
         if scans.scan(scanID) == nil { await scans.refresh() }
+        // SwiftUI can cancel this task and start it again while the screen is still sliding in. A cancelled
+        // attempt is not a failure: say nothing and let the next attempt finish.
+        guard !Task.isCancelled else { return }
         guard let scan = scans.scan(scanID), scan.isReady, let meta = scan.meta else {
             phase = .failed("This scan is not ready yet.")
             return
@@ -96,8 +99,10 @@ struct ScanViewerView: View {
         name = scan.name == scan.placeName ? scan.placeName : "\(scan.name) · \(scan.placeName)"
         do {
             let file = try await scans.modelFile(for: scan)
+            guard !Task.isCancelled else { return }
             phase = .ready(model: file, meta: ScanViewerView.meta(meta, with: scan.features))
         } catch {
+            guard !Task.isCancelled, (error as? URLError)?.code != .cancelled, !(error is CancellationError) else { return }
             phase = .failed(error.localizedDescription)
         }
     }
