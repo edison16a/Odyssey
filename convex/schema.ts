@@ -46,9 +46,14 @@ export default defineSchema({
     contributions: v.number(),
     firsts: v.number(),
     km: v.number(),
+    /** Set on the seeded demo explorers ("nina"), so the app can match them to its seed people. */
+    demoId: v.optional(v.string()),
+    /** Cosmetics and other seed extras: frame, rank, effect, icon, banner. */
+    extra: v.optional(v.any()),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
+    .index("by_demoId", ["demoId"])
     .index("by_handle", ["handle"])
     .index("by_xp", ["xp"])
     .index("by_city_xp", ["city", "xp"]),

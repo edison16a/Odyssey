@@ -144,6 +144,12 @@ await call("seed:bounties", { bounties: seed.bounties ?? [] });
 console.log(`Bounties: ${(seed.bounties ?? []).length}.`);
 
 // Everything else, one row per top-level key (Convex documents stay under 1 MB).
+// Demo explorers become real users and profiles; their posts become real posts.
+const people = await call("seed:people", { people: seed.people ?? [] });
+console.log(`Demo explorers: ${(seed.people ?? []).length} (${people.inserted} new).`);
+const posts = await call("seed:posts", { posts: seed.posts ?? [] });
+console.log(`Demo posts: ${(seed.posts ?? []).length} (${posts.inserted} new, ${posts.skipped} without an author).`);
+
 const skip = new Set(["places", "discoverPlaces", "initialState", "bounties"]);
 const entries = Object.entries(seed).filter(([k]) => !skip.has(k)).map(([key, value]) => ({ key, value }));
 for (const entry of entries) {
