@@ -47,7 +47,14 @@ export const feed = query({
   handler: async (ctx, { limit }) => {
     const userId = await requireUser(ctx);
     const friends = await ctx.db.query("friendships").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
-    const circle = new Set<string>([userId, ...friends.filter((f) => f.status === "friends").map((f) => f.friendKey)]);
+    // A friend key is a user id, or a demo explorer's seed id ("nina"): resolve both to user ids.
+    const circle = new Set<string>([userId]);
+    for (const f of friends) {
+      if (f.status !== "friends") continue;
+      if (ctx.db.normalizeId("users", f.friendKey)) { circle.add(f.friendKey); continue; }
+      const demo = await ctx.db.query("profiles").withIndex("by_demoId", (q) => q.eq("demoId", f.friendKey)).unique();
+      if (demo) circle.add(demo.userId);
+    }
     const rows = await ctx.db.query("posts").withIndex("by_created").order("desc").take(400);
     const mine = rows.filter((p) => circle.has(p.userId)).slice(0, Math.min(limit ?? 50, 100));
     return await Promise.all(
@@ -55,7 +62,7 @@ export const feed = query({
         const profile = await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", p.userId)).unique();
         return {
           ...p,
-          by: profile ? { name: profile.name, handle: profile.handle } : null,
+          by: profile ? { name: profile.name, handle: profile.handle, demoId: profile.demoId ?? null, avatarPath: profile.avatarPath ?? null } : null,
           photoUrl: p.photoStorageId ? await ctx.storage.getUrl(p.photoStorageId) : null,
           selfieUrl: p.selfieStorageId ? await ctx.storage.getUrl(p.selfieStorageId) : null,
         };
