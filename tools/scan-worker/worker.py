@@ -27,7 +27,7 @@ import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, th
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONVEX_URL = os.environ.get("CONVEX_URL", "https://impressive-mosquito-265.convex.cloud").rstrip("/")
+CONVEX_URL = os.environ.get("CONVEX_URL", "https://valiant-jay-880.convex.cloud").rstrip("/")
 KEY = os.environ.get("SCAN_WORKER_KEY", "odyssey-scan-worker")
 FPS = float(os.environ.get("SCAN_FPS", "6"))
 STEPS = int(os.environ.get("SCAN_STEPS", "7000"))

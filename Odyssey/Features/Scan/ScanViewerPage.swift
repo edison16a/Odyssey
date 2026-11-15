@@ -52,8 +52,16 @@ async function load() {
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return [SCAN_INLINE.meta, bytes.buffer];
   }
-  const [m, d] = await Promise.all([fetch('meta.json'), fetch('model.bin')]);
-  return [await m.json(), await d.arrayBuffer()];
+  // XMLHttpRequest rather than fetch: it is the one that reliably reads from an app's own address in a web view.
+  const get = (url, type) => new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', url); x.responseType = type;
+    x.onload = () => x.response ? resolve(x.response) : reject(new Error('Empty ' + url));
+    x.onerror = () => reject(new Error('Could not load ' + url));
+    x.send();
+  });
+  const [text, data] = await Promise.all([get('meta.json', 'text'), get('model.bin', 'arraybuffer')]);
+  return [JSON.parse(text), data];
 }
 
 load().then(([META, buffer]) => start(META, buffer)).catch(e => tell('error', String(e)));
@@ -288,7 +296,7 @@ window.addEventListener('keydown', e => { const k = keymap[e.key.toLowerCase()];
 window.addEventListener('keyup', e => { const k = keymap[e.key.toLowerCase()]; if (k) keys2.delete(k); });
 
 const REACH = 5;      // metres you may stray from the walked path
-const SPEED = 1.9;    // metres per second at full stick
+const SPEED = 1.5;    // metres per second at full stick
 let last = performance.now(), slow = 0;
 function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;

@@ -147,6 +147,9 @@ final class AppRouter {
         switch host {
         case "checkin":
             present(.checkIn(placeID: id))
+        case "scan":
+            // odyssey://scan films a new 3D scan; odyssey://scan/<scan id> opens a finished one.
+            if let id { present(.scanViewer(scanID: id)) } else { present(.scan(placeID: nil)) }
         case "place":
             tab = .home
             paths[.home] = id.map { [.place($0)] } ?? []

@@ -2,8 +2,8 @@
 // mask per frame: white where the scene is, black where a person is. The 3D
 // build ignores the black parts, so people do not end up in the space.
 //
-// It looks for human rectangles on the whole frame and on overlapping tiles,
-// so small people far away are found too. (Vision's person segmentation was
+// It looks for human rectangles and body poses on the whole frame and on
+// overlapping tiles, so small people far away and people sitting are found too. (Vision's person segmentation was
 // tried as well; in a crowd it only outlines one or two people, and not well.)
 //
 // usage: people_masks <images_dir> <colmap_masks_dir> <brush_masks_dir>
@@ -65,28 +65,47 @@ DispatchQueue.concurrentPerform(iterations: names.count) { i in
     canvas.fill(CGRect(x: 0, y: 0, width: w, height: h))
     var found = false
 
-    // Rectangles around every person, grown a little.
-    var requests: [VNDetectHumanRectanglesRequest] = []
+    // Two detectors per region. Rectangles find people standing and walking;
+    // body poses also find people sitting at tables, which rectangles often miss.
+    var boxes: [VNDetectHumanRectanglesRequest] = []
+    var poses: [VNDetectHumanBodyPoseRequest] = []
     for region in regions {
-        let r = VNDetectHumanRectanglesRequest()
-        r.upperBodyOnly = false
-        r.regionOfInterest = region
-        requests.append(r)
+        let b = VNDetectHumanRectanglesRequest()
+        b.upperBodyOnly = false
+        b.regionOfInterest = region
+        boxes.append(b)
+        let p = VNDetectHumanBodyPoseRequest()
+        p.regionOfInterest = region
+        poses.append(p)
     }
     let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-    try? handler.perform(requests)
+    try? handler.perform(boxes + poses)
+
+    /// A box given relative to a region, in pixels of the whole frame.
+    func pixels(_ b: CGRect, in region: CGRect) -> CGRect {
+        CGRect(x: (region.minX + b.minX * region.width) * Double(w),
+               y: (region.minY + b.minY * region.height) * Double(h),
+               width: b.width * region.width * Double(w),
+               height: b.height * region.height * Double(h))
+    }
 
     canvas.setFillColor(gray: 0, alpha: 1)
-    for (r, region) in zip(requests, regions) {
+    for (r, region) in zip(boxes, regions) {
         for person in r.results ?? [] where person.confidence > 0.3 {
-            let b = person.boundingBox
-            // The box is relative to the region it was found in.
-            var box = CGRect(x: (region.minX + b.minX * region.width) * Double(w),
-                             y: (region.minY + b.minY * region.height) * Double(h),
-                             width: b.width * region.width * Double(w),
-                             height: b.height * region.height * Double(h))
-            box = box.insetBy(dx: -box.width * 0.15 - 6, dy: -box.height * 0.08 - 6)
-            canvas.fill(box)
+            let box = pixels(person.boundingBox, in: region)
+            canvas.fill(box.insetBy(dx: -box.width * 0.15 - 6, dy: -box.height * 0.08 - 6))
+            found = true
+        }
+    }
+    for (r, region) in zip(poses, regions) {
+        for person in r.results ?? [] {
+            guard let joints = try? person.recognizedPoints(.all) else { continue }
+            let seen = joints.values.filter { $0.confidence > 0.2 }.map { $0.location }
+            guard seen.count >= 4, let minX = seen.map(\.x).min(), let maxX = seen.map(\.x).max(),
+                  let minY = seen.map(\.y).min(), let maxY = seen.map(\.y).max() else { continue }
+            let box = pixels(CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), in: region)
+            // Joints stop at the eyes, shoulders and ankles, so grow further than for a rectangle.
+            canvas.fill(box.insetBy(dx: -box.width * 0.3 - 10, dy: -box.height * 0.22 - 10))
             found = true
         }
     }

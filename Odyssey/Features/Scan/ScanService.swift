@@ -62,6 +62,19 @@ enum ScanError: LocalizedError {
     }
 }
 
+/// Where scans live. For now they have a Convex deployment of their own (same project), so the
+/// scan functions are not overwritten whenever someone else pushes to the shared dev deployment.
+/// Set ScanConvexURL in Info.plist to point somewhere else, such as the main deployment once
+/// convex/scans.ts is deployed there.
+enum ScanConfig {
+    static let url: URL = {
+        if let s = Bundle.main.object(forInfoDictionaryKey: "ScanConvexURL") as? String, let url = URL(string: s), !s.isEmpty {
+            return url
+        }
+        return URL(string: "https://valiant-jay-880.convex.cloud")!
+    }()
+}
+
 @Observable
 final class ScanService {
     static let shared = ScanService()
@@ -72,7 +85,21 @@ final class ScanService {
     /// The latest scans, newest first.
     private(set) var scans: [Scan] = []
     @ObservationIgnored private var watcher: Task<Void, Never>?
-    @ObservationIgnored private let api = ConvexAPI.shared
+
+    /// Call a scan function over Convex's HTTP API. Scans are public, so no sign-in is sent.
+    private func call(_ kind: String, _ path: String, _ args: [String: Any] = [:]) async throws -> Any {
+        var request = URLRequest(url: ScanConfig.url.appendingPathComponent("api/\(kind)"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["path": path, "args": args, "format": "json"])
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ConvexError.badResponse }
+        guard json["status"] as? String == "success" else {
+            throw ConvexError.server(json["errorMessage"] as? String ?? "The scan server did not answer.")
+        }
+        return json["value"] ?? NSNull()
+    }
 
     // MARK: Reading
 
@@ -104,7 +131,7 @@ final class ScanService {
     }
 
     func refresh() async {
-        guard let rows = try? await api.query("scans:recent") as? [[String: Any]] else { return }
+        guard let rows = try? await call("query", "scans:recent") as? [[String: Any]] else { return }
         let next = rows.compactMap(Scan.init)
         if next != scans { scans = next }
     }
@@ -122,7 +149,7 @@ final class ScanService {
         defer { if small != video { try? FileManager.default.removeItem(at: small) } }
 
         step("Sending your video", 0.15)
-        guard let target = try await api.mutation("scans:generateUploadUrl") as? String, let url = URL(string: target) else {
+        guard let target = try await call("mutation", "scans:generateUploadUrl") as? String, let url = URL(string: target) else {
             throw ScanError.upload
         }
         var request = URLRequest(url: url)
@@ -138,7 +165,7 @@ final class ScanService {
               let storageID = json["storageId"] as? String else { throw ScanError.upload }
 
         step("Almost there", 0.97)
-        let created = try await api.mutation("scans:create", [
+        let created = try await call("mutation", "scans:create", [
             "placeId": place.id, "placeName": place.name,
             "lat": place.coords.lat, "lng": place.coords.lng,
             "videoId": storageID, "seconds": seconds,
