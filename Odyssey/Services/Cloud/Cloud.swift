@@ -141,12 +141,17 @@ final class Cloud {
                 lastStatsKey = statsKey
             }
             let interests = s.interests.filter(\.value).map(\.key).sorted()
-            let profileKey = [s.user.name, s.user.handle, s.user.bio, s.user.city, interests.joined(separator: ","), "\(s.session.onboarded)"].joined(separator: "|")
+            let avatar = s.user.avatar
+            let profileKey = [s.user.name, s.user.handle, s.user.bio, s.user.city, interests.joined(separator: ","), "\(s.session.onboarded)",
+                              avatar.kind, avatar.value ?? ""].joined(separator: "|")
             if profileKey != lastProfileKey {
+                // An uploaded photo ("local") goes up through uploadAvatar; bundled photos and "none" are just names.
+                let avatarFields: [String: Any?] = avatar.kind == "local" ? [:]
+                    : ["avatarKind": avatar.kind == "photo" ? "photo" : "none", "avatarPath": avatar.kind == "photo" ? avatar.value : nil]
                 try await api.mutation("users:updateProfile", obj([
                     "name": s.user.name, "bio": s.user.bio, "city": s.user.city,
                     "interests": interests, "onboarded": s.session.onboarded,
-                ]))
+                ].merging(avatarFields) { a, _ in a }))
                 lastProfileKey = profileKey
             }
             lastSynced = Date()
@@ -233,6 +238,29 @@ final class Cloud {
                 lastError = error.localizedDescription
             }
         }
+    }
+
+    // MARK: Social and rewards
+
+    func recordFriend(_ id: String, status: String) {
+        guard signedIn else { return }
+        send("social:setFriend", ["friendKey": id, "status": status])
+    }
+
+    func recordLike(_ postId: String, on: Bool) {
+        guard signedIn else { return }
+        send("social:setLike", ["postKey": postId, "on": on])
+    }
+
+    func recordBounty(_ bounty: Bounty) {
+        guard signedIn, let data = try? JSONEncoder().encode(bounty),
+              let json = try? JSONSerialization.jsonObject(with: data) else { return }
+        send("social:postBounty", ["bounty": json])
+    }
+
+    func recordGiftCard(_ card: AppState.RedeemedCard) {
+        guard signedIn else { return }
+        send("social:redeemGiftCard", ["brand": card.brand, "amount": Double(card.amount), "code": card.code, "day": card.date])
     }
 
     // MARK: Taste

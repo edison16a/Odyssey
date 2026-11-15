@@ -36,6 +36,8 @@ export const removeUsersByEmailPrefix = internalMutation({
           await ctx.db.delete(row._id);
         }
       }
+      const bounties = await ctx.db.query("bounties").withIndex("by_owner", (q) => q.eq("ownerId", userId)).collect();
+      for (const b of bounties) await ctx.db.delete(b._id);
       const likes = await ctx.db.query("likes").withIndex("by_user_post", (q) => q.eq("userId", userId)).collect();
       for (const l of likes) await ctx.db.delete(l._id);
       const media = await ctx.db.query("media").withIndex("by_owner", (q) => q.eq("ownerId", userId)).collect();
@@ -46,6 +48,18 @@ export const removeUsersByEmailPrefix = internalMutation({
       }
       await ctx.db.delete(userId);
       removed.push(user.email ?? userId);
+    }
+    return { removed };
+  },
+});
+
+/** Delete bounties whose owner account no longer exists. */
+export const removeOrphanBounties = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let removed = 0;
+    for (const b of await ctx.db.query("bounties").collect()) {
+      if (b.ownerId && !(await ctx.db.get(b.ownerId))) { await ctx.db.delete(b._id); removed++; }
     }
     return { removed };
   },
