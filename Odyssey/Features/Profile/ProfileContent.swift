@@ -51,7 +51,7 @@ struct ProfileContent: View {
         } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
                 ForEach(list) { post in
-                    Button { router.present(.story(personID: "me", postID: post.id)) } label: { tile(post) }
+                    Button { router.push(.place(post.placeId)) } label: { tile(post) }
                         .buttonStyle(.plain)
                 }
             }

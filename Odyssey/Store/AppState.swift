@@ -112,6 +112,8 @@ nonisolated struct AppState: Codable, Sendable {
     var savedPlaces: [String: Place] = [:]
     var questInvites: [String: [String: String]] = [:]
     var questsDone: [String: String] = [:]
+    /// Today's Quests on Home: task id -> the day its reward was paid.
+    var dailyTasks: [String: String] = [:]
     var myPosts: [Post] = []
     var friends: [String] = []
     var requests: [String] = []
@@ -172,7 +174,7 @@ nonisolated struct AppState: Codable, Sendable {
              checkins, videos, firsts, taste, placeInsights, discoverLocation, discoverCategory, savedPlaces, questInvites,
              questsDone, myPosts, friends, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
              useDeviceLocation, myBounties, bountyProgress, seasonDone, travelTrails, travelCountries, travelStates,
-             footprints, trackInBackground, starred, recommended, demoMode
+             footprints, trackInBackground, starred, recommended, demoMode, dailyTasks
     }
 
     init(from decoder: Decoder) throws {
@@ -203,6 +205,7 @@ nonisolated struct AppState: Codable, Sendable {
         savedPlaces = value(.savedPlaces, d.savedPlaces)
         questInvites = value(.questInvites, d.questInvites)
         questsDone = value(.questsDone, d.questsDone)
+        dailyTasks = value(.dailyTasks, d.dailyTasks)
         myPosts = value(.myPosts, d.myPosts)
         friends = value(.friends, d.friends)
         requests = value(.requests, d.requests)

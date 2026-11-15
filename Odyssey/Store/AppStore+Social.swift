@@ -32,6 +32,7 @@ extension AppStore {
             s.requests.removeAll { $0 == id }
             s.stats.friends += 1
         }
+        Cloud.shared.recordFriend(id, status: "friends")
     }
 
     func declineRequest(_ id: String) {
@@ -72,7 +73,9 @@ extension AppStore {
     @discardableResult
     func toggleLike(_ postId: String) -> Bool {
         update { s in s.likes[postId] = !(s.likes[postId] ?? false) }
-        return state.likes[postId] ?? false
+        let on = state.likes[postId] ?? false
+        Cloud.shared.recordLike(postId, on: on)
+        return on
     }
 
     func liked(_ postId: String) -> Bool { state.likes[postId] ?? false }

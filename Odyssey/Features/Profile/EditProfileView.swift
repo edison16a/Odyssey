@@ -158,6 +158,7 @@ struct EditProfileView: View {
     private func usePhoto(_ image: UIImage) {
         guard let file = PhotoStore.save(image, prefix: "avatar", maxSide: 800) else { return }
         store.update { s in s.user.avatar = Avatar(kind: "local", value: file) }
+        Cloud.shared.uploadAvatar(file: file)
         toast.show("Photo updated", icon: "check")
     }
 

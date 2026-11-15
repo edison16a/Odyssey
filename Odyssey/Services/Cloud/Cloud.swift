@@ -71,6 +71,33 @@ final class Cloud {
         await afterSignIn(restore: true)
     }
 
+    // MARK: Text-in (phone) sign in
+
+    struct TextInLogin: Equatable {
+        var code: String
+        var nonce: String
+        /// Odyssey's iMessage line, or nil while phone sign-in is not set up.
+        var line: String?
+    }
+
+    func startTextIn() async throws -> TextInLogin {
+        guard let d = try await api.mutation("phoneAuth:start") as? [String: Any],
+              let code = d["code"] as? String, let nonce = d["nonce"] as? String else { throw ConvexError.badResponse }
+        return TextInLogin(code: code, nonce: nonce, line: d["line"] as? String)
+    }
+
+    /// "pending", "confirmed", "used" or "expired" ("pending" if the network hiccups).
+    func textInStatus(nonce: String) async -> String {
+        let d = try? await api.query("phoneAuth:status", ["nonce": nonce]) as? [String: Any]
+        return d?["state"] as? String ?? "pending"
+    }
+
+    func verifyTextIn(nonce: String) async throws {
+        try await api.verifyTextIn(nonce: nonce)
+        signedIn = true
+        await afterSignIn(restore: true)
+    }
+
     func signOut() async {
         stateWork?.cancel()
         await pushState()
@@ -141,12 +168,17 @@ final class Cloud {
                 lastStatsKey = statsKey
             }
             let interests = s.interests.filter(\.value).map(\.key).sorted()
-            let profileKey = [s.user.name, s.user.handle, s.user.bio, s.user.city, interests.joined(separator: ","), "\(s.session.onboarded)"].joined(separator: "|")
+            let avatar = s.user.avatar
+            let profileKey = [s.user.name, s.user.handle, s.user.bio, s.user.city, interests.joined(separator: ","), "\(s.session.onboarded)",
+                              avatar.kind, avatar.value ?? ""].joined(separator: "|")
             if profileKey != lastProfileKey {
+                // An uploaded photo ("local") goes up through uploadAvatar; bundled photos and "none" are just names.
+                let avatarFields: [String: Any?] = avatar.kind == "local" ? [:]
+                    : ["avatarKind": avatar.kind == "photo" ? "photo" : "none", "avatarPath": avatar.kind == "photo" ? avatar.value : nil]
                 try await api.mutation("users:updateProfile", obj([
                     "name": s.user.name, "bio": s.user.bio, "city": s.user.city,
                     "interests": interests, "onboarded": s.session.onboarded,
-                ]))
+                ].merging(avatarFields) { a, _ in a }))
                 lastProfileKey = profileKey
             }
             lastSynced = Date()
@@ -233,6 +265,63 @@ final class Cloud {
                 lastError = error.localizedDescription
             }
         }
+    }
+
+    // MARK: Social and rewards
+
+    /// A place's contribution history from Convex: explorers per day for 18 weeks and the latest walkthroughs.
+    func placeHistory(_ placeID: String) async -> PlaceHistory? {
+        guard let d = try? await api.query("history:forPlace", ["placeId": placeID]) as? [String: Any] else { return nil }
+        let days = (d["days"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue ?? 0 }
+        let recent = (d["recent"] as? [[String: Any]] ?? []).map { r in
+            PlaceHistory.Item(
+                name: r["name"] as? String ?? "Explorer",
+                personID: r["demoId"] as? String,
+                seconds: (r["seconds"] as? NSNumber)?.intValue ?? 0,
+                summary: r["summary"] as? String,
+                vibe: r["vibe"] as? String,
+                at: Date(timeIntervalSince1970: ((r["createdAt"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        }
+        return PlaceHistory(days: days, total: (d["total"] as? NSNumber)?.intValue ?? 0,
+                            explorers: (d["explorers"] as? NSNumber)?.intValue ?? 0, recent: recent)
+    }
+
+    /// Everyone who contributed to a place, most walkthroughs first.
+    func placeContributors(_ placeID: String) async -> PlaceContributors? {
+        guard let d = try? await api.query("history:contributors", ["placeId": placeID]) as? [String: Any] else { return nil }
+        let people = (d["people"] as? [[String: Any]] ?? []).map { r in
+            PlaceContributors.Person(
+                name: r["name"] as? String ?? "Explorer",
+                personID: r["demoId"] as? String,
+                count: (r["count"] as? NSNumber)?.intValue ?? 0,
+                seconds: (r["seconds"] as? NSNumber)?.intValue ?? 0,
+                summary: r["summary"] as? String,
+                lastAt: Date(timeIntervalSince1970: ((r["lastAt"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        }
+        return PlaceContributors(total: (d["total"] as? NSNumber)?.intValue ?? 0, people: people)
+    }
+
+    func recordFriend(_ id: String, status: String) {
+        guard signedIn else { return }
+        send("social:setFriend", ["friendKey": id, "status": status])
+    }
+
+    func recordLike(_ postId: String, on: Bool) {
+        guard signedIn else { return }
+        send("social:setLike", ["postKey": postId, "on": on])
+    }
+
+    func recordBounty(_ bounty: Bounty) {
+        guard signedIn, let data = try? JSONEncoder().encode(bounty),
+              let json = try? JSONSerialization.jsonObject(with: data) else { return }
+        send("social:postBounty", ["bounty": json])
+    }
+
+    func recordGiftCard(_ card: AppState.RedeemedCard) {
+        guard signedIn else { return }
+        send("social:redeemGiftCard", ["brand": card.brand, "amount": Double(card.amount), "code": card.code, "day": card.date])
     }
 
     // MARK: Taste
@@ -325,4 +414,39 @@ func obj(_ pairs: [String: Any?]) -> [String: Any] {
         out[key] = value
     }
     return out
+}
+
+/// What `history:forPlace` returns.
+struct PlaceHistory: Equatable {
+    struct Item: Equatable, Identifiable {
+        var id: String { name + "\(at.timeIntervalSince1970)" }
+        var name: String
+        var personID: String?
+        var seconds: Int
+        var summary: String?
+        var vibe: String?
+        var at: Date
+    }
+    var days: [Int]
+    var total: Int
+    var explorers: Int
+    var recent: [Item]
+
+    /// Explorers per day mapped to the five graph shades.
+    var levels: [Int] { days.map { $0 == 0 ? 0 : min(4, $0) } }
+}
+
+/// What `history:contributors` returns.
+struct PlaceContributors: Equatable {
+    struct Person: Equatable, Identifiable {
+        var id: String { (personID ?? name) + "\(lastAt.timeIntervalSince1970)" }
+        var name: String
+        var personID: String?
+        var count: Int
+        var seconds: Int
+        var summary: String?
+        var lastAt: Date
+    }
+    var total: Int
+    var people: [Person]
 }

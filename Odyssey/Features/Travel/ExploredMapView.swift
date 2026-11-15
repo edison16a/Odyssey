@@ -72,7 +72,7 @@ struct ExploredMapView: View {
                 .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard)
+        .mapStyle(.standard(elevation: .realistic))
         .onMapCameraChange(frequency: .onEnd) { context in
             let zoom = TravelHexGrid.zoom(longitudeDelta: context.region.span.longitudeDelta, width: Double(viewSize.width))
             let size = TravelHexGrid.cellSize(zoom: zoom)

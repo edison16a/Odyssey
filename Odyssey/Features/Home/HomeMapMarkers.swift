@@ -55,42 +55,40 @@ struct HomeRegionPill: View {
 /// It draws only from the precomputed pin, so a redraw never reaches the store.
 struct HomePinView: View {
     var pin: HomePin
-    @Environment(\.animationsPaused) private var paused
-    @State private var pulse = false
 
     var body: some View {
-        if pin.kind == .star {
-            HomeStarPin()
-        } else {
-            ZStack {
-                if pin.kind == .new && pin.pulses && !paused {
-                    Circle()
-                        .fill(Palette.rare)
-                        .frame(width: 22, height: 22)
-                        .scaleEffect(pulse ? 2.1 : 1)
-                        .opacity(pulse ? 0 : 0.6)
-                        .onAppear {
-                            withAnimation(.easeOut(duration: 1.8).repeatForever(autoreverses: false)) { pulse = true }
-                        }
-                }
-                Image(systemName: Icon.symbol(pin.glyph))
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(color, in: Circle())
-                    .overlay(Circle().strokeBorder(.white, lineWidth: 2))
-                    .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-            }
+        Image(systemName: Icon.symbol(pin.kind == .star ? "star-fill" : pin.glyph))
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(color, in: Circle())
+            .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
             .frame(width: 30, height: 30)
             .contentShape(Circle())
-        }
+            // The name sits beside the pin like Google Maps, without moving the pin's anchor.
+            .overlay(alignment: .leading) {
+                if pin.label {
+                    Text(pin.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                        .frame(width: 130, alignment: .leading)
+                        .shadow(color: .white, radius: 0, x: 1, y: 1)
+                        .shadow(color: .white, radius: 0, x: -1, y: -1)
+                        .shadow(color: .white, radius: 1.5)
+                        .offset(x: 32)
+                        .allowsHitTesting(false)
+                }
+            }
     }
 
     private var color: Color {
         switch pin.kind {
         case .new: return Palette.rare
         case .mine: return Palette.ink
-        case .explored, .star: return Palette.accent
+        case .star: return Palette.gold
+        case .explored: return Palette.accent
         }
     }
 }

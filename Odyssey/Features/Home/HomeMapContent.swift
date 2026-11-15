@@ -112,10 +112,9 @@ extension HomeExploredLayer {
 
     func mapLines(zoom z: Int, region: MKCoordinateRegion?) -> [HomeMapLine] {
         guard Self.showStreet(z) else { return [] }
-        return lines.filter { $0.coords.count > 1 && Self.near($0.coords, region) }.map { line in
-            line.lit
-                ? HomeMapLine(id: line.id, coords: Self.coords(line.coords), color: HomeMapStyle.blue.opacity(0.34), width: 6)
-                : HomeMapLine(id: line.id, coords: Self.coords(line.coords), color: HomeMapStyle.grey.opacity(0.55), width: 4, dash: [1, 9])
+        // Only the lit streets: the grey dashed ones added clutter without saying much.
+        return lines.filter { $0.lit && $0.coords.count > 1 && Self.near($0.coords, region) }.map { line in
+            HomeMapLine(id: line.id, coords: Self.coords(line.coords), color: HomeMapStyle.blue.opacity(0.34), width: 6)
         }
     }
 

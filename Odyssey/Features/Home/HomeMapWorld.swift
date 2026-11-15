@@ -45,10 +45,6 @@ nonisolated struct HomeMapBox: Sendable, Equatable {
 nonisolated enum HomeMapWorld {
     /// Footprint hexes show from neighbourhood level in.
     static func showsFootprints(_ zoom: Int) -> Bool { zoom >= 13 }
-    /// World pins need street level, or they crowd each other out.
-    static func showsWorldPins(_ zoom: Int) -> Bool { zoom >= 15 }
-
-    private static let maxPins = 120
 
     /// The walked hexes inside the box, built in the background. Zoomed out, they are
     /// merged into hexes three times as wide, which reads the same and draws far fewer shapes.
@@ -64,46 +60,73 @@ nonisolated enum HomeMapWorld {
 
     /// A ready to draw pin for a place.
     @MainActor
-    static func pin(_ place: Place, store: AppStore, pulses: Bool) -> HomePin {
+    static func pin(_ place: Place, store: AppStore, label: Bool, starred: Bool = false) -> HomePin {
         let status = store.status(of: place).status
-        let kind: HomePin.Kind = status == .new ? .new : (status == .mine ? .mine : .explored)
+        let kind: HomePin.Kind = starred ? .star : (status == .new ? .new : (status == .mine ? .mine : .explored))
         let first = status == .mine && store.state.firsts.contains(place.id)
         let glyph = status == .new ? "star-fill" : (first ? "crown" : (status == .mine ? "check" : store.placeKind(place).icon))
         return HomePin(id: place.id, placeID: place.id, name: place.name, coord: place.coords,
-                       kind: kind, glyph: glyph, pulses: pulses)
+                       kind: kind, glyph: glyph, pulses: false, label: label)
     }
 
-    /// Every pin for the current view: curated places, the world around you and your stars.
+    /// How many pins a zoom level gets. Like Google Maps: a few landmarks zoomed
+    /// out, more places as you zoom in, never so many that MapKit chokes.
+    static func budget(_ zoom: Int) -> Int {
+        switch zoom {
+        case ..<12: return 0
+        case 12: return 6
+        case 13: return 10
+        case 14: return 16
+        case 15: return 24
+        case 16: return 32
+        default: return 40
+        }
+    }
+
+    /// The pins for the current view. Places are ranked (starred, curated, bounty,
+    /// well reviewed first), then spread out on a screen grid so they never stack,
+    /// and only the top ones carry their name.
     @MainActor
     static func pins(store: AppStore, box: HomeMapBox?, zoom: Int, filter: String) -> [HomePin] {
+        let budget = budget(zoom)
+        guard budget > 0, let box else { return [] }
         let keep = { (place: Place) in filter == "all" || store.status(of: place).status.rawValue == filter }
+        let starred = Set(store.state.starred.keys)
+        var candidates = store.seed.places.filter { keep($0) && box.contains($0.coords) }
+        if zoom >= 14 {
+            candidates += store.osmPlaces.values.filter { $0.curated == nil && keep($0) && box.contains($0.coords) }
+        }
+        let have = Set(candidates.map(\.id))
+        candidates += store.starredPlaces.filter { box.contains($0.coords) && !have.contains($0.id) }
+        let ranked = candidates.map { ($0, rank($0, store: store, starred: starred)) }.sorted { $0.1 > $1.1 }.map(\.0)
+
+        // The box is about two screens across; a 6 x 10 grid keeps pins about a thumb apart.
+        let cols = 6.0, rows = 10.0
+        let w = (box.maxLng - box.minLng) / cols, h = (box.maxLat - box.minLat) / rows
+        var taken = Set<Int>()
         var out: [HomePin] = []
-        if zoom >= 13 {
-            out += store.seed.places.filter { keep($0) && (box?.contains($0.coords) ?? true) }
-                .map { pin($0, store: store, pulses: true) }
-        }
-        if showsWorldPins(zoom), let box {
-            out += worldPlaces(store: store, box: box, filter: filter).map { pin($0, store: store, pulses: false) }
-        }
-        if zoom >= 12 {
-            out += store.starredPlaces.filter { box?.contains($0.coords) ?? true }.map { place in
-                HomePin(id: "star-" + place.id, placeID: place.id, name: place.name, coord: place.coords,
-                        kind: .star, glyph: "star-fill", pulses: false)
-            }
+        for place in ranked {
+            guard out.count < budget else { break }
+            let cx = Int((place.coords.lng - box.minLng) / max(w, 1e-9))
+            let cy = Int((place.coords.lat - box.minLat) / max(h, 1e-9))
+            guard taken.insert(cy * 100 + cx).inserted else { continue }
+            // Names on the top half; all of them once you are at street level.
+            let label = zoom >= 16 || out.count < max(4, budget / 2)
+            out.append(pin(place, store: store, label: label, starred: starred.contains(place.id)))
         }
         return out
     }
 
-    /// World places inside the box, closest to the middle first. Places that copy
-    /// a curated spot are left out, since the curated pin is already there.
+    /// How important a place is on the map.
     @MainActor
-    static func worldPlaces(store: AppStore, box: HomeMapBox, filter: String) -> [Place] {
-        let middle = box.center
-        let inside = store.osmPlaces.values.filter { place in
-            place.curated == nil && box.contains(place.coords)
-                && (filter == "all" || store.status(of: place).status.rawValue == filter)
-        }
-        return Array(inside.sorted { $0.coords.distance(to: middle) < $1.coords.distance(to: middle) }.prefix(maxPins))
+    private static func rank(_ place: Place, store: AppStore, starred: Set<String>) -> Double {
+        var score = 0.0
+        if starred.contains(place.id) { score += 200 }
+        if !place.isOSM { score += 100 }
+        if store.bounty(for: place) != nil { score += 60 }
+        if store.status(of: place).status == .mine { score += 20 }
+        score += log(1 + Double(place.reviews ?? 0)) * 6 + (place.rating ?? 0) * 2
+        return score
     }
 }
 

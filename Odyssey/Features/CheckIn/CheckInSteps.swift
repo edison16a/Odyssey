@@ -2,14 +2,12 @@
 //  CheckInSteps.swift
 //  Odyssey
 //
-//  The first and last steps of a check-in: "Where are you?" with the
-//  places closest to you, and the BeReal style pair with a caption. Tap the
-//  small photo to swap which one is big.
+//  "Where are you?" with the places closest to you, asked after recording
+//  when the check-in did not start from a place.
 //
 
 import Foundation
 import SwiftUI
-import UIKit
 
 /// Places to check in at, closest first.
 struct CheckInPickStep: View {
@@ -28,7 +26,7 @@ struct CheckInPickStep: View {
         let list = places
         return VStack(alignment: .leading, spacing: 4) {
             Text("Where are you?").font(.system(size: 28, weight: .bold)).tracking(-0.6).foregroundStyle(Palette.ink)
-            Text("Pick the place in your photo to earn coins and keep your streak.").mutedStyle(13)
+            Text("Pick the place to earn coins and keep your streak.").mutedStyle(13)
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(list) { place in
@@ -75,92 +73,5 @@ struct CheckInPickStep: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-    }
-}
-
-/// The photo pair, the caption and Post.
-struct CheckInComposeStep: View {
-    var place: Place
-    var placeImage: UIImage
-    var selfieImage: UIImage
-    var onPost: (String) -> Void
-
-    @State private var caption = ""
-    @State private var swapped = false
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(spacing: 16) {
-            CheckInDualPhoto(main: swapped ? selfieImage : placeImage, inset: swapped ? placeImage : selfieImage,
-                             placeName: place.name) {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { swapped.toggle() }
-            }
-            FieldBox(icon: "edit") {
-                TextField("Say something about \(place.name)", text: $caption)
-                    .font(.system(size: 15))
-                    .focused($focused)
-                    .submitLabel(.done)
-                    .onChange(of: caption) { _, value in
-                        if value.count > 120 { caption = String(value.prefix(120)) }
-                    }
-            }
-            HStack(spacing: 8) {
-                Image(systemName: Icon.symbol("users")).font(.system(size: 14))
-                Text("Your friends see this at the front of their row")
-                Spacer(minLength: 0)
-            }
-            .mutedStyle(13)
-            Button {
-                focused = false
-                onPost(caption)
-            } label: {
-                Label("Post and finish", systemImage: "paperplane.fill")
-            }
-            .buttonStyle(.pill(.accent, fill: true))
-        }
-    }
-}
-
-/// The big photo with the small one tucked in the corner and the place name.
-struct CheckInDualPhoto: View {
-    var main: UIImage
-    var inset: UIImage
-    var placeName: String
-    var onSwap: () -> Void
-
-    var body: some View {
-        Palette.ink
-            .overlay { Image(uiImage: main).resizable().scaledToFill() }
-            .overlay(alignment: .topLeading) {
-                Button(action: onSwap) {
-                    GeometryReader { geo in
-                        Image(uiImage: inset)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    }
-                    .aspectRatio(3 / 4, contentMode: .fit)
-                    .frame(width: 110)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white, lineWidth: 2.5))
-                    .shadow(color: .black.opacity(0.3), radius: 8, y: 6)
-                }
-                .buttonStyle(PressStyle(scale: 0.95))
-                .accessibilityLabel("Swap photos")
-                .padding(12)
-            }
-            .overlay(alignment: .bottomLeading) {
-                Label(placeName, systemImage: "location.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(.black.opacity(0.5), in: Capsule())
-                    .padding(12)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .frame(maxHeight: .infinity)
     }
 }

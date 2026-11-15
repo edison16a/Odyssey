@@ -181,6 +181,7 @@ struct DemoGuideView: View {
         guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
               let file = PhotoStore.save(image, prefix: "avatar", maxSide: 800) else { return }
         store.update { s in s.user.avatar = Avatar(kind: "local", value: file) }
+        Cloud.shared.uploadAvatar(file: file)
         toast.show("Photo updated", icon: "check")
     }
 }

@@ -8,8 +8,11 @@
 // Codes go out through Resend when AUTH_RESEND_KEY is set. Without it (local
 // development) the code is printed to the Convex logs instead.
 
-import { convexAuth } from "@convex-dev/auth/server";
+import { convexAuth, createAccount, retrieveAccount } from "@convex-dev/auth/server";
 import { Email } from "@convex-dev/auth/providers/Email";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 const CODE_LENGTH = 6;
 
@@ -48,6 +51,30 @@ const EmailOTP = Email({
   },
 });
 
+// Text-in sign-in (see phoneAuth.ts): the nonce proves this device started the
+// login, and Keiki already confirmed which phone number texted the code.
+const PhoneText = ConvexCredentials({
+  id: "phone-text",
+  authorize: async (credentials, ctx) => {
+    const nonce = String(credentials.nonce ?? "");
+    if (!nonce) return null;
+    const phone: string | null = await ctx.runMutation(internal.phoneAuth.consume, { nonce });
+    if (!phone) return null;
+    try {
+      const { user } = await retrieveAccount(ctx, { provider: "phone-text", account: { id: phone } });
+      return { userId: user._id as Id<"users"> };
+    } catch {
+      const isNumber = phone.startsWith("+");
+      const { user } = await createAccount(ctx, {
+        provider: "phone-text",
+        account: { id: phone },
+        profile: isNumber ? { phone, phoneVerificationTime: Date.now() } : { email: phone },
+      });
+      return { userId: user._id as Id<"users"> };
+    }
+  },
+});
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [EmailOTP],
+  providers: [EmailOTP, PhoneText],
 });

@@ -116,7 +116,7 @@ struct NotificationsView: View {
     private func follow(_ n: AppNotification) {
         guard let target = n.open else { return }
         if let post = target.post, let found = store.post(post) {
-            router.present(.story(personID: found.by, postID: post))
+            router.push(.place(found.placeId))
         } else if let place = target.place {
             router.push(.place(place))
         } else if target.screen == "leaderboard" {

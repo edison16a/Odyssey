@@ -3,8 +3,8 @@
 //  Odyssey
 //
 //  The list of what a check-in paid: coins, the first explorer bonus, any
-//  quest, the bonus for a place Explore recommended, experience and the
-//  streak with Globie. Each row rises in after the one before, and the
+//  quest, the bonus for a place Explore recommended, experience, what the
+//  video added and the streak with Globie. Each row rises in after the one before, and the
 //  numbers count up.
 //
 
@@ -14,6 +14,8 @@ import SwiftUI
 struct AdventureRewards: View {
     @Environment(AppStore.self) private var store
     var result: CheckInResult
+    var video: VideoResult? = nil
+    var payout: BountyPayout? = nil
     var appeared: Bool
 
     private struct Row: Identifiable {
@@ -25,6 +27,8 @@ struct AdventureRewards: View {
         var prefix: String
         var suffix: String
         var valueColor: Color = Palette.ink
+        /// Shown as is instead of counting up, for cash.
+        var text: String? = nil
     }
 
     var body: some View {
@@ -38,9 +42,15 @@ struct AdventureRewards: View {
                         .background(isStreak(row) ? Color(hex: "#eef3ff") : .white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     Text(row.label).font(.system(size: 15)).foregroundStyle(Palette.ink)
                     Spacer(minLength: 8)
-                    CountUpText(value: row.value, from: row.id == "streak" ? max(0, row.value - 1) : 0, prefix: row.prefix, suffix: row.suffix)
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(row.valueColor)
+                    Group {
+                        if let text = row.text {
+                            Text(text)
+                        } else {
+                            CountUpText(value: row.value, from: row.id == "streak" ? max(0, row.value - 1) : 0, prefix: row.prefix, suffix: row.suffix)
+                        }
+                    }
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(row.valueColor)
                 }
                 .padding(.vertical, 9)
                 .adventureRise(appeared, delay: 0.42 + Double(index) * 0.1)
@@ -69,6 +79,16 @@ struct AdventureRewards: View {
                             value: Rewards.recommended.coins, prefix: "+", suffix: " coins"))
         }
         rows.append(Row(id: "xp", glyph: .icon("bolt.fill", Palette.accent), label: "Experience", value: result.xp, prefix: "+", suffix: " XP"))
+        if let video, !video.already {
+            rows.append(Row(id: "video", glyph: .icon("video.fill", Palette.accent), label: "Video bonus", value: video.xp, prefix: "+", suffix: " XP"))
+            if video.coins > 0 {
+                rows.append(Row(id: "video-quest", glyph: .icon("flag.fill", Palette.gold), label: "Video quest", value: video.coins, prefix: "+", suffix: " coins"))
+            }
+        }
+        if let payout, payout.amount > 0 {
+            rows.append(Row(id: "bounty", glyph: .icon("dollarsign", Palette.rare), label: "\(payout.bounty.sponsor) bounty",
+                            value: 0, prefix: "", suffix: "", text: "+" + Format.money(payout.amount)))
+        }
         let days = store.state.streak.days
         let mood: GlobieMood = result.streak && StreakTiers.milestones.contains(days) ? .ecstatic : .happy
         rows.append(Row(id: "streak", glyph: .globie(mood), label: result.streak ? "Streak extended" : "Streak kept",

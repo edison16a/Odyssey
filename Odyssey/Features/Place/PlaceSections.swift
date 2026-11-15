@@ -14,6 +14,8 @@ import SwiftUI
 struct PlaceSectionsStack: View {
     @Environment(AppStore.self) private var store
     var place: Place
+    /// Real contribution history from Convex; the local estimate shows until it arrives.
+    @State private var history: PlaceHistory?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,11 +24,14 @@ struct PlaceSectionsStack: View {
             }
             section { PlaceFirstExplorerCard(place: place) }
             section { PlaceFriendsCard(place: place) }
-            section { PlaceWalkthroughCard(place: place) }
+            section { PlaceWalkthroughCard(place: place, total: history?.total) }
             if !store.topExplorers(place).isEmpty {
                 section { PlaceRegulars(place: place) }
             }
-            section { PlaceActivityGrid(place: place) }
+            section { PlaceActivityGrid(place: place, history: history) }
+            if let history, !history.recent.isEmpty {
+                section { PlaceContributions(items: history.recent) }
+            }
             if !explorerPosts.isEmpty {
                 section { PlaceExplorerPhotos(place: place, posts: explorerPosts) }
             }
@@ -47,6 +52,12 @@ struct PlaceSectionsStack: View {
                 }
             }
         }
+        .task(id: place.id) { await load() }
+    }
+
+    private func load() async {
+        let next = await Cloud.shared.placeHistory(place.id)
+        withAnimation(.easeOut(duration: 0.25)) { history = next }
     }
 
     private func section<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -152,9 +163,10 @@ private struct PlaceFirstExplorerCard: View {
 private struct PlaceWalkthroughCard: View {
     @Environment(AppStore.self) private var store
     var place: Place
+    var total: Int?
 
     var body: some View {
-        let count = store.videoCount(place)
+        let count = total.map { $0 + (store.state.videos[place.id]?.count ?? 0) } ?? store.videoCount(place)
         let insight = store.state.placeInsights[place.id]
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "video.fill")

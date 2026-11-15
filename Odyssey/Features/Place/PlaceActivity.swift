@@ -67,17 +67,18 @@ struct PlaceRegulars: View {
     }
 }
 
-/// GitHub style grid of visits over the last 18 weeks.
+/// GitHub style grid of explorers per day over the last 18 weeks.
 struct PlaceActivityGrid: View {
     @Environment(AppStore.self) private var store
     var place: Place
+    var history: PlaceHistory?
 
     static let shades: [Color] = [Palette.surface3, Color(hex: "#c9d6ff"), Color(hex: "#8ea8ff"), Color(hex: "#5579ff"), Palette.accent]
 
     var body: some View {
-        let cells = store.activity(place)
+        let cells = history?.levels ?? store.activity(place)
         VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "Explorer activity", link: "Last 18 weeks")
+            SectionHeader(title: "Contributions", link: history.map { "\($0.total) in 18 weeks" } ?? "Last 18 weeks")
             VStack(spacing: 10) {
                 HStack(spacing: 3) {
                     ForEach(0..<18, id: \.self) { week in
@@ -112,6 +113,56 @@ struct PlaceActivityGrid: View {
     }
 }
 
+/// The latest walkthroughs explorers shared here, newest first.
+struct PlaceContributions: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AppRouter.self) private var router
+    var items: [PlaceHistory.Item]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeader(title: "Recent contributions")
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    row(item)
+                    if index < items.count - 1 { Divider().padding(.leading, 52) }
+                }
+            }
+            .card(padding: 14)
+        }
+    }
+
+    private func row(_ item: PlaceHistory.Item) -> some View {
+        let person = item.personID.flatMap { store.person($0) } ?? (item.name == store.me.name ? store.me : nil)
+        return Button {
+            if let person { router.push(.person(person.id)) }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                if let person {
+                    AvatarView(person: person, size: 40, frame: "none")
+                } else {
+                    Circle().fill(Palette.surface3).frame(width: 40, height: 40)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(item.name).font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ink)
+                        Text("\(item.seconds)s walkthrough").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                        Spacer(minLength: 0)
+                        Text(item.at, format: .relative(presentation: .named)).font(.system(size: 11)).foregroundStyle(Palette.muted)
+                    }
+                    if let summary = item.summary {
+                        Text(summary).font(.system(size: 13)).foregroundStyle(Palette.ink2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// Explorer photos: the place with their selfie in the corner. Opens the story.
 struct PlaceExplorerPhotos: View {
     @Environment(AppRouter.self) private var router
@@ -124,7 +175,7 @@ struct PlaceExplorerPhotos: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(posts) { post in
-                        Button { router.present(.story(personID: post.by, postID: post.id)) } label: {
+                        Button { router.push(.person(post.by)) } label: {
                             PhotoView(path: place.photo)
                                 .frame(width: 132, height: 170)
                                 .overlay(alignment: .topLeading) {

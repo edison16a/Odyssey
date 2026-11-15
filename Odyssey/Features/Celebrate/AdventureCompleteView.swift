@@ -2,24 +2,23 @@
 //  AdventureCompleteView.swift
 //  Odyssey
 //
-//  Adventure Complete. Shown right after a check-in posts: the photo pair,
-//  what you earned (coins, XP, the streak with Globie, the first explorer
-//  bonus and your name on the place), any rank up, then the optional
-//  walkthrough video that pays bonus XP.
+//  Adventure Complete. Shown right after a check-in video saves: the place,
+//  what you earned (coins, XP, the video bonus, the streak with Globie, the
+//  first explorer bonus and your name on the place) and any rank up.
 //  Ported from features/celebrate/adventure.js.
 //
 
 import Foundation
 import SwiftUI
-import UIKit
 
 struct AdventureCompleteView: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
     var place: Place
     var result: CheckInResult
-    var placeImage: UIImage?
-    var selfieImage: UIImage?
+    /// What the check-in video paid on top, when it saved.
+    var video: VideoResult? = nil
+    var payout: BountyPayout? = nil
 
     @State private var appeared = false
     @State private var confetti = false
@@ -43,9 +42,8 @@ struct AdventureCompleteView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 6)
                         .adventureRise(appeared, delay: 0.33)
-                    if result.fresh { AdventureRewards(result: result, appeared: appeared).padding(.top, 16) }
+                    if result.fresh { AdventureRewards(result: result, video: video, payout: payout, appeared: appeared).padding(.top, 16) }
                     tierUp
-                    walkOffer
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -65,7 +63,7 @@ struct AdventureCompleteView: View {
         .overlay { if confetti { ConfettiView(count: result.first ? 110 : 70).ignoresSafeArea() } }
         .adventureMoments(result)
         .sheet(isPresented: $sharing) {
-            AdventureShareSheet(place: place, first: result.first, placeImage: placeImage, selfieImage: selfieImage)
+            AdventureShareSheet(place: place, first: result.first, placeImage: nil, selfieImage: nil)
         }
         .onAppear {
             withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) { appeared = true }
@@ -76,30 +74,16 @@ struct AdventureCompleteView: View {
     }
 
     private var headline: (title: String, sub: String) {
-        if !result.fresh { return ("Posted", "You already explored \(place.name) today, so rewards were counted earlier.") }
+        if !result.fresh { return ("Saved", "You already explored \(place.name) today, so rewards were counted earlier.") }
         if result.first { return ("Adventure Complete!", "You are the first explorer at \(place.name). Your name stays on it for good.") }
         return ("Adventure Complete!", "You've explored somewhere new.")
     }
 
     private var photoCard: some View {
         GeometryReader { geo in
-            Group {
-                if let placeImage { Image(uiImage: placeImage).resizable().scaledToFill() } else { PhotoView(path: place.photo) }
-            }
+            PhotoView(path: place.photo)
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
-            .overlay(alignment: .topLeading) {
-                if let selfieImage {
-                    Image(uiImage: selfieImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width * 0.34, height: geo.size.width * 0.34 * 4 / 3)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white, lineWidth: 2.5))
-                        .shadow(color: .black.opacity(0.25), radius: 6, y: 4)
-                        .padding(10)
-                }
-            }
             .overlay(alignment: .bottomTrailing) {
                 if result.first {
                     Label("First explorer", systemImage: "star.fill")
@@ -142,40 +126,6 @@ struct AdventureCompleteView: View {
             .scaleEffect(appeared ? 1 : 0.9)
             .opacity(appeared ? 1 : 0)
             .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.9), value: appeared)
-        }
-    }
-
-    /// The optional walkthrough offer, the bonus path.
-    @ViewBuilder private var walkOffer: some View {
-        let done = (store.state.videos[place.id] ?? []).contains { $0.date == Format.today() }
-        if !done {
-            let quest = store.questAt(place, kinds: ["walk"])
-            let xp = Rewards.video.xp + (quest.map { $0.xp * $0.multiplier } ?? 0)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(Palette.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Want bonus XP?").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
-                        Text("Record a short interior walkthrough to help improve place information.")
-                            .font(.system(size: 13)).foregroundStyle(Palette.ink2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    Text("+\(xp) XP").font(.system(size: 15, weight: .heavy)).foregroundStyle(Palette.accent)
-                }
-                Button { router.present(.walkthrough(placeID: place.id)) } label: {
-                    Label("Record walkthrough", systemImage: "video.fill")
-                }
-                .buttonStyle(.pill(.accent, fill: true))
-            }
-            .padding(14)
-            .background(Palette.accentSoft, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .padding(.top, 12)
-            .adventureRise(appeared, delay: 1.0)
         }
     }
 }

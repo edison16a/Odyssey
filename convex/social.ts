@@ -178,3 +178,39 @@ export const myGiftCards = query({
     return await ctx.db.query("giftCards").withIndex("by_user", (q) => q.eq("userId", userId)).order("desc").collect();
   },
 });
+
+// ── Friends' explorations (the Friends map) ─────────────────────────────
+
+/** Every place each of your friends has explored, for the hexagon map. No posts, no live location. */
+export const friendExplorations = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUser(ctx);
+    const friends = await ctx.db.query("friendships").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
+    const out = [];
+    for (const f of friends) {
+      if (f.status !== "friends") continue;
+      let friendId = ctx.db.normalizeId("users", f.friendKey);
+      if (!friendId) {
+        const demo = await ctx.db.query("profiles").withIndex("by_demoId", (q) => q.eq("demoId", f.friendKey)).unique();
+        friendId = demo?.userId ?? null;
+      }
+      if (!friendId) continue;
+      const profile = await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", friendId!)).unique();
+      const checkins = await ctx.db.query("checkins").withIndex("by_user", (q) => q.eq("userId", friendId!)).collect();
+      const places = new Map<string, { placeId: string; name: string; lat?: number; lng?: number; day: string }>();
+      for (const c of checkins) {
+        if (!places.has(c.placeId)) places.set(c.placeId, { placeId: c.placeId, name: c.placeName, lat: c.lat, lng: c.lng, day: c.day });
+      }
+      out.push({
+        friendKey: f.friendKey,
+        userId: friendId,
+        name: profile?.name ?? "Explorer",
+        handle: profile?.handle ?? "",
+        avatarPath: profile?.avatarPath ?? null,
+        places: [...places.values()],
+      });
+    }
+    return out;
+  },
+});
