@@ -103,6 +103,8 @@ export default defineSchema({
     firstExplorerId: v.optional(v.id("users")),
     firstExploredAt: v.optional(v.number()),
     insights: v.optional(insights),
+    /** Demo amenity tags: wifi, seating, bathroom, outlets, quiet, accessible, elevator. */
+    features: v.optional(v.array(v.string())),
     updatedAt: v.number(),
   })
     .index("by_placeId", ["placeId"])
@@ -266,6 +268,45 @@ export default defineSchema({
   })
     .index("by_bountyId", ["bountyId"])
     .index("by_owner", ["ownerId"]),
+
+  /** Public amenities on the map: bathrooms, elevators, water, free wifi (demo seed). */
+  amenities: defineTable({
+    kind: v.string(), // "bathroom" | "elevator" | "water" | "wifi"
+    name: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    area: v.string(),
+    note: v.string(),
+    access: v.string(), // "public" | "customers"
+    placeId: v.optional(v.string()),
+  }).index("by_area", ["area"]),
+
+  /** Restaurant and cafe deals sold or given through Whop (mocked for the demo). */
+  deals: defineTable({
+    dealId: v.string(),
+    placeId: v.string(),
+    placeName: v.string(),
+    title: v.string(),
+    detail: v.string(),
+    percent: v.number(),
+    priceCents: v.number(), // 0 = free to claim
+    whopPlanId: v.string(),
+    remaining: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_dealId", ["dealId"])
+    .index("by_place", ["placeId"]),
+
+  dealClaims: defineTable({
+    dealId: v.string(),
+    userId: v.optional(v.id("users")),
+    device: v.optional(v.string()),
+    code: v.string(),
+    receipt: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_deal", ["dealId"])
+    .index("by_user", ["userId"]),
 
   giftCards: defineTable({
     userId: v.id("users"),

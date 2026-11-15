@@ -10,7 +10,9 @@
 
 import type * as admin from "../admin.js";
 import type * as adventures from "../adventures.js";
+import type * as amenities from "../amenities.js";
 import type * as auth from "../auth.js";
+import type * as deals from "../deals.js";
 import type * as files from "../files.js";
 import type * as history from "../history.js";
 import type * as http from "../http.js";
@@ -33,7 +35,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adventures: typeof adventures;
+  amenities: typeof amenities;
   auth: typeof auth;
+  deals: typeof deals;
   files: typeof files;
   history: typeof history;
   http: typeof http;

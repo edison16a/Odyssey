@@ -54,6 +54,7 @@ final class Cloud {
     /// Called once at launch.
     func attach(_ store: AppStore) {
         self.store = store
+        Task { await loadDemoData() }
         guard signedIn else { return }
         Task { await afterSignIn(restore: false) }
     }
@@ -303,6 +304,46 @@ final class Cloud {
         return PlaceContributors(total: (d["total"] as? NSNumber)?.intValue ?? 0, people: people)
     }
 
+    /// Amenities and deals are public demo data, loaded signed in or not.
+    func loadDemoData() async {
+        if let d = try? await api.query("amenities:demo") as? [String: Any] {
+            let features = (d["features"] as? [String: [String]]) ?? [:]
+            let points: [AmenityPoint] = (d["points"] as? [[String: Any]] ?? []).compactMap { r in
+                guard let id = r["id"] as? String, let kind = r["kind"] as? String,
+                      let lat = (r["lat"] as? NSNumber)?.doubleValue, let lng = (r["lng"] as? NSNumber)?.doubleValue else { return nil }
+                return AmenityPoint(id: id, kind: kind, name: r["name"] as? String ?? kind.capitalized, coord: Coord(lat, lng),
+                                    note: r["note"] as? String ?? "", access: r["access"] as? String ?? "public",
+                                    placeID: r["placeId"] as? String)
+            }
+            store?.placeFeatures = features
+            store?.amenityPoints = points
+        }
+        if let rows = try? await api.query("deals:all") as? [[String: Any]] {
+            var byPlace: [String: [Deal]] = [:]
+            for r in rows {
+                guard let id = r["dealId"] as? String, let placeID = r["placeId"] as? String else { continue }
+                let deal = Deal(id: id, placeID: placeID, placeName: r["placeName"] as? String ?? "",
+                                title: r["title"] as? String ?? "", detail: r["detail"] as? String ?? "",
+                                percent: (r["percent"] as? NSNumber)?.intValue ?? 0,
+                                priceCents: (r["priceCents"] as? NSNumber)?.intValue ?? 0,
+                                whopPlanID: r["whopPlanId"] as? String ?? "",
+                                remaining: (r["remaining"] as? NSNumber)?.intValue ?? 0,
+                                expiresAt: Date(timeIntervalSince1970: ((r["expiresAt"] as? NSNumber)?.doubleValue ?? 0) / 1000))
+                byPlace[placeID, default: []].append(deal)
+            }
+            store?.deals = byPlace
+        }
+    }
+
+    /// Claim a deal through (mock) Whop. Returns the code to show at the counter.
+    func claimDeal(_ deal: Deal) async throws -> String {
+        let device = UIDevice.current.identifierForVendor?.uuidString ?? "device"
+        let d = try await api.mutation("deals:claim", ["dealId": deal.id, "device": device]) as? [String: Any]
+        guard let code = d?["code"] as? String else { throw URLError(.badServerResponse) }
+        store?.update { s in s.claimedDeals[deal.id] = code }
+        return code
+    }
+
     func recordFriend(_ id: String, status: String) {
         guard signedIn else { return }
         send("social:setFriend", ["friendKey": id, "status": status])
@@ -449,4 +490,41 @@ struct PlaceContributors: Equatable {
     }
     var total: Int
     var people: [Person]
+}
+
+/// A public bathroom, elevator, water fountain or free wifi spot on the map.
+struct AmenityPoint: Identifiable, Equatable, Sendable {
+    var id: String
+    var kind: String // "bathroom" | "elevator" | "water" | "wifi"
+    var name: String
+    var coord: Coord
+    var note: String
+    var access: String // "public" | "customers"
+    var placeID: String?
+
+    var icon: String {
+        switch kind {
+        case "bathroom": return "toilet.fill"
+        case "elevator": return "arrow.up.arrow.down.square.fill"
+        case "water": return "drop.fill"
+        default: return "wifi"
+        }
+    }
+}
+
+/// A restaurant or cafe deal sold or given through Whop.
+struct Deal: Identifiable, Equatable, Sendable {
+    var id: String
+    var placeID: String
+    var placeName: String
+    var title: String
+    var detail: String
+    var percent: Int
+    var priceCents: Int
+    var whopPlanID: String
+    var remaining: Int
+    var expiresAt: Date
+
+    var isFree: Bool { priceCents == 0 }
+    var priceText: String { isFree ? "Free" : String(format: "$%.2f", Double(priceCents) / 100) }
 }
