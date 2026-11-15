@@ -111,8 +111,9 @@ struct AddFriendsView: View {
             }
         }
         contactsBlock
-        section("Explorers near you", link: nil) {
-            rows(store.seed.people.filter { !store.isFriend($0.id) && !store.state.requests.contains($0.id) })
+        let nearby = store.seed.people.filter { !store.isFriend($0.id) && !store.state.requests.contains($0.id) }
+        if !nearby.isEmpty {
+            section("Explorers near you", link: nil) { rows(nearby) }
         }
         if contacts.access == .authorized && !visibleInvites.isEmpty {
             section("Invite", link: "\(visibleInvites.count) contacts") { inviteRows(visibleInvites) }
@@ -310,7 +311,12 @@ struct AddFriendsView: View {
             add(person)
             return
         }
-        store.addFriend(match.friendKey)
+        let bundled = match.avatarPath.map { $0.hasPrefix("assets/") } ?? false
+        let person = Person(id: match.userId, name: match.name, handle: match.handle,
+                            avatar: Avatar(kind: bundled ? "photo" : "none", value: bundled ? match.avatarPath : nil),
+                            frame: "none", rank: 0, xp: 0, explored: 0, contributions: 0, friend: true,
+                            city: match.city, bio: "", effect: nil, icon: nil, banner: nil)
+        store.addFriend(person)
         Haptics.tap()
         toast.show("You and \(match.name.split(separator: " ").first.map(String.init) ?? match.name) are friends", icon: "check")
     }

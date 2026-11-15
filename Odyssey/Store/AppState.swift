@@ -122,6 +122,9 @@ nonisolated struct AppState: Codable, Sendable {
     var tipsSeen: [String] = []
     var myPosts: [Post] = []
     var friends: [String] = []
+    /// Real Odyssey users added from your contacts, keyed by their user id,
+    /// so they show in your friends list like the seeded explorers do.
+    var cloudPeople: [String: Person] = [:]
     var requests: [String] = []
     var storiesSeen: [String: Bool] = [:]
     var likes: [String: Bool] = [:]
@@ -178,7 +181,7 @@ nonisolated struct AppState: Codable, Sendable {
     nonisolated enum CodingKeys: String, CodingKey {
         case version, session, interests, user, wallet, streak, stats, owned, equipped, earnedBadges, boosts, demoArea,
              checkins, videos, firsts, taste, placeInsights, discoverLocation, discoverCategory, savedPlaces, questInvites,
-             questsDone, myPosts, friends, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
+             questsDone, myPosts, friends, cloudPeople, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
              useDeviceLocation, myBounties, bountyProgress, seasonDone, travelTrails, travelCountries, travelStates,
              footprints, trackInBackground, starred, recommended, demoMode, dailyTasks, claimedDeals, connectedSources, tipsSeen
     }
@@ -222,6 +225,7 @@ nonisolated struct AppState: Codable, Sendable {
         tipsSeen = value(.tipsSeen, d.tipsSeen)
         myPosts = value(.myPosts, d.myPosts)
         friends = value(.friends, d.friends)
+        cloudPeople = value(.cloudPeople, d.cloudPeople)
         requests = value(.requests, d.requests)
         storiesSeen = value(.storiesSeen, d.storiesSeen)
         likes = value(.likes, d.likes)
