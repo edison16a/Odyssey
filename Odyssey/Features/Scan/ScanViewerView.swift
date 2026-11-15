@@ -370,7 +370,7 @@ struct PlaceInsideCard: View {
                 if !features.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array((showAll ? features : Array(features.prefix(4))).enumerated()), id: \.offset) { _, item in
-                            row(item.feature, space: item.space)
+                            row(item.feature)
                         }
                     }
                     if features.count > 4 {
@@ -400,17 +400,13 @@ struct PlaceInsideCard: View {
             default: return ("Wheelchair access unknown", "questionmark.circle", Palette.muted, Palette.surface3)
             }
         }()
-        return HStack(alignment: .top, spacing: 10) {
+        return HStack(spacing: 10) {
             Image(systemName: look.icon)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
                 .background(look.tint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(look.title).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
-                Text(access.reason).font(.system(size: 13)).foregroundStyle(Palette.ink2).fixedSize(horizontal: false, vertical: true)
-                Text("Seen in \(access.space)").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
-            }
+            Text(look.title).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
             Spacer(minLength: 0)
         }
         .padding(10)
@@ -418,26 +414,18 @@ struct PlaceInsideCard: View {
         .background(look.soft, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
     }
 
-    private func row(_ feature: ScanFeature, space: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+    private func row(_ feature: ScanFeature) -> some View {
+        HStack(spacing: 10) {
             Image(systemName: feature.icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(feature.isBarrier ? Palette.danger : feature.helps ? Palette.success : Palette.ink2)
                 .frame(width: 26, height: 26)
                 .background(.white, in: Circle())
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(feature.label).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
-                    if feature.certainty != "seen" {
-                        Text("Likely").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.muted)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.white, in: Capsule())
-                    }
-                }
-                Text("\(feature.detail) Seen in \(space).")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(feature.label).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
+            if feature.certainty != "seen" {
+                Text("Likely").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.muted)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.white, in: Capsule())
             }
             Spacer(minLength: 0)
         }
