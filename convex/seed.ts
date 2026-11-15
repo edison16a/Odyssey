@@ -200,6 +200,21 @@ export const posts = mutation({
         .unique();
       if (existing) await ctx.db.patch(existing._id, fields);
       else { await ctx.db.insert("posts", { ...fields, userId: author.userId, clientId }); inserted++; }
+
+      // Each demo post is also a check-in, so friends' explorations live in the same table as everyone's.
+      const place = await placeByPlaceId(ctx, fields.placeId);
+      const day = new Date(fields.createdAt).toISOString().slice(0, 10);
+      const already = await ctx.db
+        .query("checkins")
+        .withIndex("by_user_place_day", (q) => q.eq("userId", author.userId).eq("placeId", fields.placeId))
+        .first();
+      if (!already && place) {
+        await ctx.db.insert("checkins", {
+          userId: author.userId, placeId: fields.placeId, placeName: place.name, day, caption: fields.caption,
+          first: fields.first, recommended: false, coins: 0, xp: 0, points: 0, lat: place.lat, lng: place.lng,
+          createdAt: fields.createdAt,
+        });
+      }
     }
     return { inserted, skipped };
   },

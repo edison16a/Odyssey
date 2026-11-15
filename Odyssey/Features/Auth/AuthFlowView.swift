@@ -3,7 +3,7 @@
 //  Odyssey
 //
 //  The signed out stage. The landing montage keeps playing while the
-//  foreground steps change: landing, email and the one time code. Keeping
+//  foreground steps change: landing, phone (text-in), email and the one time code. Keeping
 //  the video mounted is what makes signing in feel like one continuous
 //  moment. Ported from features/auth/auth-stage.js and landing.js.
 //
@@ -12,7 +12,7 @@ import Foundation
 import SwiftUI
 
 struct AuthFlowView: View {
-    enum Step { case landing, email, otp }
+    enum Step { case landing, phone, email, otp }
 
     @Environment(AppStore.self) private var store
     @Environment(ToastCenter.self) private var toast
@@ -28,11 +28,13 @@ struct AuthFlowView: View {
                 switch step {
                 case .landing:
                     AuthLanding(
-                        start: { returning = false; go(.email) },
+                        start: { returning = false; go(.phone) },
                         skip: skipToOnboarding
                     )
+                case .phone:
+                    AuthTextInStep(back: { go(.landing) }, useEmail: { go(.email) })
                 case .email:
-                    AuthEmailStep(email: $email, returning: returning, back: { go(.landing) }, send: sendCode)
+                    AuthEmailStep(email: $email, returning: returning, back: { go(.phone) }, send: sendCode)
                 case .otp:
                     AuthOTPStep(email: email, back: { go(.email) })
                 }

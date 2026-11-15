@@ -4,7 +4,7 @@
 //
 //  The Daily Map: your adventure today. The day's best photo goes full
 //  bleed with the route drawn over it, every stop marked and the totals in
-//  front, ready for a story. Today's seeded stops get your own check-ins
+//  front, ready to share to another app. Today's seeded stops get your own check-ins
 //  from today added, so the map grows as you explore.
 //  Ported from features/recap/recap-share.js.
 //
@@ -16,8 +16,6 @@ import UIKit
 struct DayShareView: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
-    @Environment(RewardPopCenter.self) private var pop
-    @State private var posted = false
     @State private var rendered: UIImage?
 
     var body: some View {
@@ -37,11 +35,6 @@ struct DayShareView: View {
                 .frame(maxHeight: .infinity)
                 .padding(.horizontal, 20)
             HStack(spacing: 8) {
-                Button { post(day) } label: {
-                    Label(posted ? "Posted" : "Post to friends", systemImage: posted ? "checkmark" : "plus")
-                }
-                .buttonStyle(.pill(.light, fill: true))
-                .disabled(posted)
                 if let rendered {
                     ShareLink(item: Image(uiImage: rendered), preview: SharePreview(day.title, image: Image(uiImage: rendered))) {
                         Label("Share", systemImage: "square.and.arrow.up")
@@ -55,19 +48,6 @@ struct DayShareView: View {
         .foregroundStyle(.white)
         .background(Color.black.ignoresSafeArea())
         .onAppear { render(day) }
-    }
-
-    private func post(_ day: RecapDay) {
-        guard !posted, let hero = day.hero else { return }
-        let entry = Post(id: "mine-day-\(Int(Date().timeIntervalSince1970))", by: "me", placeId: hero.id, kind: "day",
-                         minutesAgo: 0, selfie: nil, caption: "\(day.title). \(day.stops.count) places.", seconds: nil,
-                         first: nil, likes: 0, comments: 0, milestone: nil,
-                         day: DayPost(title: day.title, when: day.date, km: day.km, time: day.duration, firsts: day.firsts,
-                                      stops: day.stops.map(\.place.id)),
-                         photoFile: nil, selfieFile: nil, createdAt: Date())
-        store.update { s in s.myPosts.insert(entry, at: 0) }
-        posted = true
-        pop.storyPosted(hero, store: store)
     }
 
     private func render(_ day: RecapDay) {

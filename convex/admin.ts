@@ -14,7 +14,7 @@ export const removeUsersByEmailPrefix = internalMutation({
   args: { prefix: v.string() },
   handler: async (ctx, { prefix }) => {
     if (prefix.length < 4) throw new Error("Prefix too short");
-    const users = (await ctx.db.query("users").collect()).filter((u) => u.email?.startsWith(prefix));
+    const users = (await ctx.db.query("users").collect()).filter((u) => u.email?.startsWith(prefix) || u.phone?.startsWith(prefix));
     const removed: string[] = [];
     for (const user of users) {
       const userId = user._id as Id<"users">;
@@ -47,7 +47,7 @@ export const removeUsersByEmailPrefix = internalMutation({
         for (const row of rows) await ctx.db.delete(row._id);
       }
       await ctx.db.delete(userId);
-      removed.push(user.email ?? userId);
+      removed.push(user.email ?? user.phone ?? userId);
     }
     return { removed };
   },

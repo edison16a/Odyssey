@@ -4,7 +4,7 @@
 //
 //  Someone else's profile, laid out like a creator profile: banner photo,
 //  framed avatar, name, rank chip, four stats and actions, then who they
-//  explore like, their rank roadmap and their posts or places.
+//  explore like, their rank roadmap and the places they explored.
 //  Ported from profile-view.js and the person route in profile-tab.js.
 //
 
@@ -18,7 +18,6 @@ struct PersonView: View {
     @Environment(RewardPopCenter.self) private var pop
 
     var personID: String
-    @State private var tab = "posts"
 
     var body: some View {
         if let person = store.person(personID) {
@@ -32,7 +31,7 @@ struct PersonView: View {
                     }
                     ProfileRoadmap(xp: person.xp) { router.push(.ranks) }
                         .padding(.horizontal, Space.s5).padding(.top, Space.s5)
-                    FriendsPersonContent(person: person, tab: $tab).padding(.top, Space.s5)
+                    FriendsPersonPlaces(person: person).padding(.top, Space.s5)
                     Color.clear.frame(height: 40)
                 }
             }

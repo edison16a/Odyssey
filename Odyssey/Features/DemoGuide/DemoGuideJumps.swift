@@ -64,8 +64,7 @@ enum DemoGuideJumps {
             DemoGuideJump(id: "post-bounty", label: "Post a bounty", icon: "plus"),
         ]),
         DemoGuideGroup(title: "Social", items: [
-            DemoGuideJump(id: "friends", label: "Friends and stories", icon: "users"),
-            DemoGuideJump(id: "story", label: "Play a story", icon: "eye"),
+            DemoGuideJump(id: "friends", label: "Friends map", icon: "users"),
         ]),
         DemoGuideGroup(title: "You", items: [
             DemoGuideJump(id: "profile", label: "Profile", icon: "user"),
@@ -157,7 +156,6 @@ struct DemoGuideRunner {
         case "business": push(.profile, .business)
         case "post-bounty": present(.profile, .bountyWizard)
         case "friends": inApp(.friends)
-        case "story": present(.friends, .story(personID: "nina", postID: nil))
         case "profile": inApp(.profile)
         case "shop": push(.profile, .shop(nil))
         case "globe": present(.profile, .globe)
