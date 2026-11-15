@@ -76,7 +76,7 @@ struct OnboardingOpeningStep: View {
     @State private var bounce = false
     @State private var leaving = false
 
-    private let lines = ["Saving your taste gem", "Pinning your first adventure", "Setting up today's quests"]
+    private let lines = ["Saving your explorer type", "Pinning your first adventure", "Setting up today's quests"]
 
     var body: some View {
         VStack(spacing: 18) {

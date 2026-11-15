@@ -6,8 +6,8 @@
 //  adventure can I do today, and what will I earn? Top to bottom: your
 //  coins, streak and rank; Today's Adventure, sealed until you reveal it;
 //  Today's Quests, which pay automatically as you complete them; your
-//  World Map; then places you'll love and hidden gems, with Discover more
-//  opening Explore.
+//  World Map; then one card into Explore's list of places you'll love
+//  and hidden gems.
 //
 
 import Foundation
@@ -184,53 +184,11 @@ struct HomeAdventureHero: View {
         }
     }
 
-    /// Today's pick stays hidden until you open it: a small daily moment.
+    /// Today's pick stays hidden until you hold it open.
     private var sealed: some View {
-        let pick = store.dailyPick()
-        return Button(action: reveal) {
-            ZStack {
-                PlacePhoto(place: pick.place)
-                    .blur(radius: 28)
-                    .scaleEffect(1.2)
-                    .overlay(Color.black.opacity(0.55))
-                VStack(spacing: 14) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 26, weight: .semibold))
-                        .frame(width: 60, height: 60)
-                        .background(.white.opacity(0.14), in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.25)))
-                        .scaleEffect(glow ? 1.06 : 1)
-                    VStack(spacing: 6) {
-                        Text("Today's Adventure").font(.system(size: 24, weight: .heavy)).tracking(-0.5)
-                        Text("A new place picked for your taste, every day.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                    Text("Tap to reveal")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 22)
-                        .frame(height: 44)
-                        .background(.white, in: Capsule())
-                        .padding(.top, 4)
-                }
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(20)
-            }
-            .frame(height: 316)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+        HomeHoldReveal(place: store.dailyPick().place) {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { store.revealDaily() }
         }
-        .buttonStyle(PressStyle(scale: 0.98))
-        .accessibilityLabel("Reveal today's adventure")
-        .loops($glow, .easeInOut(duration: 1.4))
-    }
-
-    private func reveal() {
-        Haptics.success()
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { store.revealDaily() }
     }
 
     private var revealed: some View {
@@ -393,56 +351,35 @@ struct HomeTodayQuests: View {
 struct HomeRecommendations: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
+    @AppStorage("exploreLayout") private var layout = "feed"
+    @AppStorage("exploreListTab") private var listTab: ExploreListTab = .loved
     var onPick: (Place) -> Void
 
+    /// Places you'll love and hidden gems live in Explore now; this opens them.
     var body: some View {
-        let open = store.nearbyPlaces.filter { store.status(of: $0).status != .mine }
-        let loved = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
-        let lovedIDs = Set(loved.map(\.id))
-        let gems = Array(open.filter { store.status(of: $0).status == .new && !lovedIDs.contains($0.id) }.prefix(8))
-        VStack(alignment: .leading, spacing: 0) {
-            shelf("Places you'll love", subtitle: "Picked from your taste gem", places: loved)
-            shelf("Hidden gems", subtitle: "Nobody on Odyssey has been yet. Be first for +\(Rewards.first.coins) coins", places: gems, star: true)
-            Button {
-                Haptics.tap()
-                router.select(.explore)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "safari").font(.system(size: 15, weight: .semibold))
-                    Text("Discover more").font(.system(size: 16, weight: .bold))
-                }
-                .foregroundStyle(Palette.ink)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(.white, in: Capsule())
-                .overlay(Capsule().strokeBorder(Palette.line))
-            }
-            .buttonStyle(PressStyle(scale: 0.98))
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
-        }
-    }
-
-    @ViewBuilder private func shelf(_ title: String, subtitle: String, places: [Place], star: Bool = false) -> some View {
-        if !places.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
+        let gem = TasteGem.of(store)
+        Button {
+            Haptics.tap()
+            layout = "list"
+            listTab = .loved
+            router.select(.explore)
+        } label: {
+            HStack(spacing: 12) {
+                TasteGemView(gem: gem, size: 40, animated: false)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 20, weight: .heavy)).tracking(-0.4).foregroundStyle(Palette.ink)
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.muted)
+                    Text("Places you'll love").font(.system(size: 17, weight: .heavy)).foregroundStyle(Palette.ink)
+                    Text("Picked for you, a \(gem.persona), plus hidden gems").font(.system(size: 13)).foregroundStyle(Palette.muted)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(places) { place in
-                            HomeRecCard(place: place, star: star) { onPick(place) }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.muted)
             }
-            .padding(.top, 28)
+            .padding(14)
+            .background(.white, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         }
+        .buttonStyle(PressStyle(scale: 0.98))
+        .padding(.horizontal, 20)
+        .padding(.top, 28)
     }
 }
 

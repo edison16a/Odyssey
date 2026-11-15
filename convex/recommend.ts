@@ -267,6 +267,10 @@ export const forYou = action({
       profileFacts: sm.facts,
       usedSupermemory: sm.ok,
     });
+    console.log(
+      `[forYou] ${where ?? "?"}: ranked ${pool.length} places, Supermemory ${sm.ok ? "on" : `off (${sm.error})`}, ` +
+        `${sm.memories.length} memories, top: ${result.slice(0, 3).map((r) => `${r.placeId} (${r.reason})`).join("; ")}`,
+    );
     return {
       picks: result,
       profileFacts: sm.facts,

@@ -143,7 +143,7 @@ struct StreakPowerUpView: View {
     }
 
     private var actions: some View {
-        Button(milestone == nil ? "Continue" : "Awesome") {
+        Button(milestone == nil ? "Continue" : "See what you unlocked") {
             if milestone == nil {
                 onFinish()
             } else {

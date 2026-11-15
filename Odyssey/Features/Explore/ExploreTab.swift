@@ -4,7 +4,9 @@
 //
 //  Explore: a full screen, swipe-up feed of real places around you, ranked
 //  by what you love. Swipe up to pass, double tap or tap the heart to save,
-//  and your taste gem in the corner reacts to every save. Chips along the
+//  and your explorer type in the corner reacts to every save. The grid
+//  button switches to list mode: Places you'll love and Hidden gems, all at
+//  once, to scroll and like. Chips along the
 //  top filter for the practical things (wifi, a bathroom, outlets...), and
 //  search and categories sit behind the magnifying glass. Every save teaches
 //  the same taste model the rest of the app uses.
@@ -28,6 +30,9 @@ struct ExploreTab: View {
     @State private var gemPops = 0
     /// Where the top bar ends, so the card's photo bars sit under it.
     @State private var chromeBottom: CGFloat = 0
+    /// "feed" is one place a screen; "list" is everything at once in a grid.
+    @AppStorage("exploreLayout") private var layout = "feed"
+    @AppStorage("exploreListTab") private var listTab: ExploreListTab = .loved
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -114,7 +119,10 @@ struct ExploreTab: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         let list = visible
-        if list.isEmpty {
+        if layout == "list" {
+            ExploreListView(places: list, tab: $listTab, loading: feed.loading || feeding,
+                            topInset: chromeBottom, onToggleLike: toggleLike, onNeedMore: loadMore)
+        } else if list.isEmpty {
             if feed.loading || (!feed.exhausted && amenities.isEmpty) {
                 loadingPage
             } else {
@@ -237,6 +245,24 @@ struct ExploreTab: View {
         }
     }
 
+    /// List mode: load further out whenever the grid nears its end.
+    private func loadMore() {
+        guard !feeding, !feed.loading, !feed.exhausted else { return }
+        feeding = true
+        Task {
+            let wanted = visible.count + 12
+            for _ in 0..<6 {
+                let before = feed.cards.count
+                feed.index = feed.cards.count
+                await feed.topUp(store: store)
+                if feed.cards.count == before || feed.exhausted { break }
+                let gems = visible.filter { store.status(of: $0).status == .new }.count
+                if visible.count >= wanted && (listTab == .loved || gems >= 8) { break }
+            }
+            feeding = false
+        }
+    }
+
     // MARK: Actions
 
     private func like(_ place: Place) {
@@ -302,6 +328,19 @@ struct ExploreTab: View {
                 }
                 .buttonStyle(PressStyle(scale: 0.95))
                 .accessibilityLabel("Explore location")
+                Button {
+                    Haptics.tap()
+                    withAnimation(.easeInOut(duration: 0.25)) { layout = layout == "list" ? "feed" : "list" }
+                } label: {
+                    Image(systemName: layout == "list" ? "rectangle.portrait" : "square.grid.2x2")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: ExploreChrome.height, height: ExploreChrome.height)
+                        .background(ExploreChrome.fill, in: Circle())
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(PressStyle(scale: 0.92))
+                .accessibilityLabel(layout == "list" ? "Show one at a time" : "Show all as a list")
                 Button { Haptics.tap(); showSearch = true } label: {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 14, weight: .semibold))

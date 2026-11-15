@@ -159,7 +159,7 @@ struct OnboardingConnectStep: View {
                 Text("Make Odyssey yours")
                     .font(.system(size: 26, weight: .bold)).tracking(-0.6)
                     .foregroundStyle(Palette.ink)
-                Text("Connect what you already use. We read it once to cut your taste gem.")
+                Text("Connect what you already use. We read it once to find your explorer type.")
                     .font(.system(size: 15))
                     .foregroundStyle(Palette.muted)
                     .padding(.top, 6)
@@ -192,7 +192,7 @@ struct OnboardingConnectStep: View {
                 .padding(.top, 14)
 
                 Button { proceed() } label: {
-                    Text(anyConnected ? "Build my taste gem" : "Continue")
+                    Text(anyConnected ? "Find my explorer type" : "Continue")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -439,7 +439,7 @@ struct OnboardingCompileStep: View {
             "Loading \(total)…",
             outdoor,
             "Matching 2,400 places in San Francisco…",
-            "Shaping your gem…",
+            "Finding your explorer type…",
         ]
     }
 
@@ -611,7 +611,7 @@ struct OnboardingRevealStep: View {
         VStack(spacing: 14) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 14) {
-                    Text("YOUR TASTE GEM")
+                    Text("YOUR EXPLORER TYPE")
                         .font(.system(size: 12, weight: .bold))
                         .tracking(2)
                         .foregroundStyle(.white.opacity(0.6))
@@ -629,7 +629,7 @@ struct OnboardingRevealStep: View {
                                 chip(trait, gem.colors[i % gem.colors.count])
                             }
                         }
-                        Text("Your gem is your explorer personality. It shifts as you save places and check in, and it decides what Odyssey shows you first.")
+                        Text("Your explorer type decides what Odyssey shows you first. It shifts as you save places and check in.")
                             .font(.system(size: 14))
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)
