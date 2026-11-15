@@ -4,10 +4,10 @@
 //
 //  Home answers one question within seconds of opening the app: what
 //  adventure can I do today, and what will I earn? Top to bottom: your
-//  coins, streak and rank; Today's Adventure with one big Start button;
-//  Today's Quests, which pay automatically as you complete them;
-//  recommendations; and your explored map, lower down where it supports
-//  exploring instead of leading it.
+//  coins, streak and rank; Today's Adventure, sealed until you reveal it;
+//  Today's Quests, which pay automatically as you complete them; your
+//  World Map; then places you'll love and hidden gems, with Discover more
+//  opening Explore.
 //
 
 import Foundation
@@ -33,15 +33,13 @@ struct HomeTab: View {
                     HomeAdventureHero()
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
-                    HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
-                        .padding(.horizontal, 20)
-                        .padding(.top, 28)
-                    HomeRecommendations(onPick: { preview = $0 }, part: .loved)
                     HomeTodayQuests(justPaid: paid)
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
-                    HomeRecommendations(onPick: { preview = $0 }, part: .more)
-                    HomeDealsShelf()
+                    HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
+                        .padding(.horizontal, 20)
+                        .padding(.top, 28)
+                    HomeRecommendations(onPick: { preview = $0 })
                     TabBarSpacer()
                 }
             }
@@ -50,10 +48,7 @@ struct HomeTab: View {
             }
         }
         .background(Palette.surface)
-        .onAppear {
-            if !store.dailyRevealed { store.revealDaily() }
-            payTasks()
-        }
+        .onAppear { payTasks() }
         // Completing a task anywhere in the app pays it the next time Home sees it.
         .onChange(of: store.state.checkins) { payTasks() }
         .onChange(of: store.state.videos) { payTasks() }
@@ -181,10 +176,71 @@ struct HomeAdventureHero: View {
     @State private var glow = false
 
     var body: some View {
+        if store.dailyRevealed {
+            revealed
+                .transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity))
+        } else {
+            sealed
+                .transition(.opacity)
+        }
+    }
+
+    /// Today's pick stays hidden until you open it: a small daily moment.
+    private var sealed: some View {
+        let pick = store.dailyPick()
+        return Button(action: reveal) {
+            ZStack {
+                PlacePhoto(place: pick.place)
+                    .blur(radius: 28)
+                    .scaleEffect(1.2)
+                    .overlay(Color.black.opacity(0.55))
+                VStack(spacing: 14) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 26, weight: .semibold))
+                        .frame(width: 60, height: 60)
+                        .background(.white.opacity(0.14), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.25)))
+                        .scaleEffect(glow ? 1.06 : 1)
+                    VStack(spacing: 6) {
+                        Text("Today's Adventure").font(.system(size: 24, weight: .heavy)).tracking(-0.5)
+                        Text("A new place picked for your taste, every day.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                    Text("Tap to reveal")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 22)
+                        .frame(height: 44)
+                        .background(.white, in: Capsule())
+                        .padding(.top, 4)
+                }
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(20)
+            }
+            .frame(height: 316)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+        }
+        .buttonStyle(PressStyle(scale: 0.98))
+        .accessibilityLabel("Reveal today's adventure")
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { glow = true }
+        }
+    }
+
+    private func reveal() {
+        Haptics.success()
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { store.revealDaily() }
+    }
+
+    private var revealed: some View {
         let pick = store.dailyPick()
         let done = store.checkedInTodayIDs.contains(pick.place.id)
-        let reward = Rewards.checkIn.coins + (pick.rare ? Rewards.first.coins : 0) + 150
-        VStack(spacing: 0) {
+        let rewards = store.checkInRewards(for: pick.place)
+        return VStack(spacing: 0) {
             Button { router.push(.place(pick.place.id)) } label: {
                 ZStack(alignment: .bottomLeading) {
                     PlacePhoto(place: pick.place)
@@ -218,9 +274,9 @@ struct HomeAdventureHero: View {
                     } else {
                         Text("You'll earn").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted)
                         CoinIcon(size: 18)
-                        Text("+\(reward) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
+                        Text("+\(rewards.coins) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
                         Spacer()
-                        Text("+\(Rewards.checkIn.xp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
+                        Text("+\(rewards.totalXp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
                     }
                 }
                 .foregroundStyle(Palette.ink)
@@ -343,46 +399,44 @@ struct HomeRecommendations: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
     var onPick: (Place) -> Void
-    /// The "places you'll love" shelf sits high on Home; the rest come after the quests.
-    enum Part { case loved, more }
-    var part: Part = .more
 
     var body: some View {
         let open = store.nearbyPlaces.filter { store.status(of: $0).status != .mine }
-        let near = Array(open.sorted { store.metres(to: $0) < store.metres(to: $1) }.prefix(8))
-        let gems = Array(open.filter { store.status(of: $0).status == .new }.prefix(8))
-        let forYou = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
-        let friends = Array(store.friendAdventures.prefix(8))
+        let loved = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
+        let lovedIDs = Set(loved.map(\.id))
+        let gems = Array(open.filter { store.status(of: $0).status == .new && !lovedIDs.contains($0.id) }.prefix(8))
         VStack(alignment: .leading, spacing: 0) {
-            if part == .loved {
-                shelf("Places You'll Love", link: "Discover", places: forYou)
-            } else {
-            shelf("Adventures Near You", link: "See all", places: near)
-            shelf("Hidden Gems", link: "Be first · +\(Rewards.first.coins)", places: gems, star: true)
-            }
-            if part == .more, !friends.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    SectionHeader(title: "Adventures Your Friends Completed", link: "Friends") { router.select(.friends) }
-                        .padding(.horizontal, 20)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(friends, id: \.place.id) { item in
-                                HomeFriendAdventureCard(place: item.place, person: item.by) { onPick(item.place) }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
+            shelf("Places you'll love", subtitle: "Picked from your taste gem", places: loved)
+            shelf("Hidden gems", subtitle: "Nobody on Odyssey has been yet. Be first for +\(Rewards.first.coins) coins", places: gems, star: true)
+            Button {
+                Haptics.tap()
+                router.select(.explore)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "safari").font(.system(size: 15, weight: .semibold))
+                    Text("Discover more").font(.system(size: 16, weight: .bold))
                 }
-                .padding(.top, 28)
+                .foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(.white, in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.line))
             }
+            .buttonStyle(PressStyle(scale: 0.98))
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
         }
     }
 
-    @ViewBuilder private func shelf(_ title: String, link: String, places: [Place], star: Bool = false) -> some View {
+    @ViewBuilder private func shelf(_ title: String, subtitle: String, places: [Place], star: Bool = false) -> some View {
         if !places.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                SectionHeader(title: title, link: link) { router.select(.explore) }
-                    .padding(.horizontal, 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 20, weight: .heavy)).tracking(-0.4).foregroundStyle(Palette.ink)
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.muted)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(places) { place in

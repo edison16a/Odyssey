@@ -27,7 +27,7 @@ struct WalkthroughRecorder: View {
 
     /// Shorter taps are ignored, so a double tap does not end the video at once.
     private static let minimum = 1.0
-    private static let maximum = 60.0
+    private static let maximum = Double(Rewards.maxClipSeconds)
 
     private var live: Bool { camera.isAvailable && !camera.permissionDenied && camera.isRunning }
 

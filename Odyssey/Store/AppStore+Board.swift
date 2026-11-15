@@ -119,11 +119,11 @@ extension AppStore {
             s.earnedBadges.removeAll { $0 == "top-10" || $0 == "top-100" }
         }
         guard on else { return }
-        // Just under Voyager, and just outside the city's top 100.
+        // Just under Voyager, and 11th in the city: one check-in from the top 10.
         let voyager = seed.ranks.indices.contains(4) ? seed.ranks[4].xp : 900
         update { s in
             s.wallet.xp = voyager - 15
-            s.wallet.points = cityPoints(for: 140)
+            s.wallet.points = cityPoints(for: 11)
         }
     }
 
