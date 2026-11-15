@@ -92,7 +92,7 @@ struct MegaQuestCard: View {
             .opacity(done ? 0.6 : 1)
         }
         .buttonStyle(PressStyle())
-        .onAppear { withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) { breathe = true } }
+        .loops($breathe, .easeInOut(duration: 1.5))
     }
 }
 

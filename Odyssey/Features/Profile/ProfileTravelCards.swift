@@ -59,7 +59,7 @@ struct ProfileGlobeCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Odyssey Globe 2026").font(.system(size: 11, weight: .bold)).tracking(0.55).textCase(.uppercase).opacity(0.6)
                     Text("Your year in places is ready").font(.system(size: 18, weight: .bold))
-                    Text("\(store.state.stats.explored) places, \(Format.number(store.state.stats.km)) km, one explorer twin")
+                    Text("\(store.state.stats.explored) places, \(Format.number(store.kmWalked)) km, one explorer twin")
                         .font(.system(size: 13)).opacity(0.7)
                 }
                 Spacer(minLength: 0)

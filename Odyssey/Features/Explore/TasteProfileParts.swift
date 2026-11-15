@@ -34,7 +34,7 @@ struct TasteHero: View {
             HStack(spacing: 8) {
                 stat("\(profile.thumbs.count)", "thumbs")
                 stat("\(store.state.stats.explored)", "explored")
-                stat(Format.number(store.state.stats.km), "km walked")
+                stat(Format.number(store.kmWalked), "km walked")
             }
         }
         .foregroundStyle(.white)

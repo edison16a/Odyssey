@@ -154,8 +154,10 @@ final class Cloud {
         guard signedIn, let store else { return }
         let s = store.state
         do {
-            let data = try JSONEncoder().encode(s)
-            let json = String(decoding: data, as: UTF8.self)
+            // Off the main thread: with a long walking history this is a lot of JSON.
+            let json = try await Task.detached(priority: .utility) {
+                String(decoding: try JSONEncoder().encode(s), as: UTF8.self)
+            }.value
             try await api.mutation("users:saveState", ["version": Double(s.version), "state": json])
 
             let statsKey = "\(s.wallet.coins)|\(s.wallet.xp)|\(s.wallet.points)|\(s.wallet.cash)|\(s.streak.days)|\(s.stats.explored)|\(s.stats.contributions)|\(s.firsts.count)"

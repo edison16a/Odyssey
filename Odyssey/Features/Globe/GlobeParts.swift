@@ -83,7 +83,7 @@ struct GlobeSummary: View {
             Text("2026 Globe").font(.system(size: 11, weight: .bold)).tracking(1.3).textCase(.uppercase).opacity(0.75)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                 cell("\(s.stats.explored)", "places")
-                cell("\(Format.number(s.stats.km)) km", "walked")
+                cell("\(Format.number(store.kmWalked)) km", "walked")
                 cell("\(s.firsts.count)", "first finds")
                 cell(store.rank().current.name, "rank")
             }

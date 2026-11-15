@@ -69,7 +69,12 @@ extension AppStore {
 
     /// The open bounty that covers a place, by place first, then by area.
     func bounty(for place: Place) -> Bounty? {
-        let list = openBounties
+        bounty(for: place, in: openBounties)
+    }
+
+    /// The same, against a list worked out ahead: ranking every pin on the map
+    /// would otherwise rebuild the whole bounty list once per place.
+    func bounty(for place: Place, in list: [Bounty]) -> Bounty? {
         return list.first { bounty in
             guard bounty.target.kind == "place" else { return false }
             if bounty.target.placeId == place.id { return true }

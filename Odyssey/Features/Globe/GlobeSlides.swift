@@ -94,7 +94,7 @@ struct GlobeSlideView: View {
             return [eyebrow("This year you explored"), number("\(s.stats.explored)"), h2("places"),
                     sub("12 more than last year. Most of them on foot."), AnyView(GlobePhotos(places: visited))]
         case .walked:
-            return [eyebrow("You walked"), number(Format.number(s.stats.km), small: "km"),
+            return [eyebrow("You walked"), number(Format.number(store.kmWalked), small: "km"),
                     sub("Roughly Berkeley to Monterey. Not bad for someone who said they would just get coffee."), AnyView(GlobeRoute())]
         case .top:
             let cat = GlobeData.topCategory(store)

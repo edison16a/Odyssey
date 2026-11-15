@@ -70,7 +70,7 @@ struct ProfileTab: View {
             ProfileBadgesSection().padding(.top, 28)
 
             if let explorer = store.seed.explorer(store.state.equipped.explorer) {
-                ProfileExplorerCard(explorer: explorer, km: store.state.stats.km) { pickingExplorer = true }
+                ProfileExplorerCard(explorer: explorer, km: store.kmWalked) { pickingExplorer = true }
                     .padding(.horizontal, 20)
                     .padding(.top, 28)
             }

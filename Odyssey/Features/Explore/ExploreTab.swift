@@ -68,9 +68,13 @@ struct ExploreTab: View {
             syncCategory()
         }
         .onChange(of: store.state.discoverCategory) { syncCategory() }
-        .onChange(of: currentID) { keepFed() }
+        .onChange(of: currentID) {
+            warmPhotos()
+            keepFed()
+        }
         .onChange(of: feed.cards.count) {
             if currentID == nil || !visible.contains(where: { $0.id == currentID }) { currentID = visible.first?.id }
+            warmPhotos()
             keepFed()
         }
         .onChange(of: amenities) {
@@ -199,6 +203,13 @@ struct ExploreTab: View {
     private static func list(_ items: [String]) -> String {
         guard items.count > 1 else { return items.first ?? "that" }
         return items.dropLast().joined(separator: ", ") + " and " + items.last!
+    }
+
+    /// Decode the next few cards' photos ahead of the swipe, so each page slides in smoothly.
+    private func warmPhotos() {
+        let list = visible
+        let at = list.firstIndex { $0.id == currentID } ?? 0
+        PhotoCache.warm(list[at...].prefix(4).map(\.photo))
     }
 
     /// Keep places coming: when you near the end of what passes the filters,
