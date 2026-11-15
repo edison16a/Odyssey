@@ -125,11 +125,7 @@ nonisolated enum HomeMapWorld {
         var score = 0.0
         if starred.contains(place.id) { score += 200 }
         if !place.isOSM { score += 100 }
-        let covered = bounties.contains { b in
-            (b.target.kind == "place" && b.target.placeId == place.id)
-                || (b.target.kind == "area" && b.center.distance(to: place.coords) <= b.radius)
-        }
-        if covered { score += 60 }
+        if store.bounty(for: place, in: bounties) != nil { score += 60 }
         if store.status(of: place).status == .mine { score += 20 }
         score += log(1 + Double(place.reviews ?? 0)) * 6 + (place.rating ?? 0) * 2
         return score

@@ -20,11 +20,11 @@ extension AppStore {
                       effect: s.equipped.effect, icon: s.equipped.explorer, banner: s.equipped.banner)
     }
 
-    func person(_ id: String) -> Person? { id == "me" ? me : seed.person(id) }
+    func person(_ id: String) -> Person? { id == "me" ? me : seed.person(id) ?? state.cloudPeople[id] }
 
     func isFriend(_ id: String) -> Bool { state.friends.contains(id) }
 
-    var friends: [Person] { state.friends.compactMap { seed.person($0) } }
+    var friends: [Person] { state.friends.compactMap { seed.person($0) ?? state.cloudPeople[$0] } }
 
     func addFriend(_ id: String) {
         update { s in
@@ -33,6 +33,15 @@ extension AppStore {
             s.stats.friends += 1
         }
         Cloud.shared.recordFriend(id, status: "friends")
+    }
+
+    /// Add a real Odyssey user found in your contacts. They are remembered on
+    /// this phone so they appear in your friends list and on their profile.
+    func addFriend(_ person: Person) {
+        var p = person
+        p.friend = true
+        update { s in s.cloudPeople[p.id] = p }
+        addFriend(p.id)
     }
 
     func declineRequest(_ id: String) {

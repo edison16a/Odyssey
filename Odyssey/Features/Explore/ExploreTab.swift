@@ -26,6 +26,8 @@ struct ExploreTab: View {
     @State private var feeding = false
     /// Bumped on every fresh save so the gem gives a small pop.
     @State private var gemPops = 0
+    /// Where the top bar ends, so the card's photo bars sit under it.
+    @State private var chromeBottom: CGFloat = 0
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -42,6 +44,7 @@ struct ExploreTab: View {
                             .frame(height: topInset + 100)
                             .allowsHitTesting(false)
                         topBar.padding(.top, topInset + Space.s2)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chromeBottom = $0 }
                     }
                 }
                 .ignoresSafeArea(edges: .top)
@@ -126,7 +129,8 @@ struct ExploreTab: View {
                                         onToggleLike: { toggleLike(place) },
                                         onNotForMe: { notForMe(place) },
                                         onDirections: { go(place) },
-                                        onDetails: { router.push(.place(place.id)) })
+                                        onDetails: { router.push(.place(place.id)) },
+                                        topInset: chromeBottom)
                             .frame(width: size.width, height: size.height)
                             .id(place.id)
                     }

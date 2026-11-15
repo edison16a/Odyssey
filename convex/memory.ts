@@ -150,6 +150,8 @@ export const rememberInterests = internalAction({
   handler: async (_ctx, { userId, interests }) => {
     if (!hasSupermemory() || interests.length === 0) return;
     const labels: Record<string, string> = {
+      startups: "startups, founders and tech",
+      coffee: "cafes and good coffee",
       food: "good food",
       books: "books and libraries",
       outdoors: "the outdoors and parks",

@@ -22,7 +22,7 @@ import SwiftUI
 
 /// A pin with everything worked out ahead, so drawing it never touches the store.
 nonisolated struct HomePin: Identifiable, Equatable, Sendable {
-    enum Kind: Sendable { case mine, new, explored, star }
+    enum Kind: Sendable { case mine, new, explored, star, destination }
     var id: String
     var placeID: String
     var name: String
@@ -59,6 +59,10 @@ struct HomeMapCanvas: UIViewRepresentable, Equatable {
     var onPin: (String) -> Void
     var onBounty: (Bounty) -> Void
     var onAmenity: (String) -> Void = { _ in }
+    /// A shop, park or landmark of Apple's own map was tapped.
+    var onMapItem: (MKMapItem) -> Void = { _ in }
+    /// You moved the map by hand; the new camera goes back to whoever owns the position.
+    var onUserMove: (MapCameraPosition) -> Void = { _ in }
 
     nonisolated static func == (a: HomeMapCanvas, b: HomeMapCanvas) -> Bool {
         MainActor.assumeIsolated { a.revision == b.revision && a.position == b.position }
@@ -69,11 +73,11 @@ struct HomeMapCanvas: UIViewRepresentable, Equatable {
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView(frame: .zero)
         let configuration = MKStandardMapConfiguration(elevationStyle: .realistic)
-        configuration.pointOfInterestFilter = .excludingAll
+        configuration.pointOfInterestFilter = .includingAll
         map.preferredConfiguration = configuration
+        map.selectableMapFeatures = [.pointsOfInterest, .physicalFeatures, .territories]
         map.delegate = context.coordinator
         map.register(HomeMapMarkerView.self, forAnnotationViewWithReuseIdentifier: HomeMapMarkerView.reuseID)
-        map.register(HomeMapMeView.self, forAnnotationViewWithReuseIdentifier: HomeMapMeView.reuseID)
         return map
     }
 
@@ -83,9 +87,14 @@ struct HomeMapCanvas: UIViewRepresentable, Equatable {
         engine.onPin = onPin
         engine.onBounty = onBounty
         engine.onAmenity = onAmenity
+        engine.onMapItem = onMapItem
+        engine.onUserMove = onUserMove
         if engine.position != position {
             engine.position = position
-            engine.move(map, to: position)
+            // A position another map reported from a hand move is not an order to follow it.
+            if position != HomeMapEngine.movedByHand {
+                engine.move(map, to: position, animated: context.transaction.animation != nil)
+            }
         }
         if engine.revision != revision {
             engine.revision = revision

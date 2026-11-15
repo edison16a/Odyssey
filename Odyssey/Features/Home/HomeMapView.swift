@@ -29,6 +29,10 @@ struct HomeMapView: View {
     var amenities: Set<String> = []
     var onAmenity: (AmenityPoint) -> Void = { _ in }
 
+    var destinations: [Place] = []
+    var selectedDestination: Place?
+    var onCamera: (MKCoordinateRegion) -> Void = { _ in }
+
     @State private var layer = HomeExploredLayer()
     /// What the map draws, rebuilt only when the zoom, region, layer or a pin changes.
     @State private var scene = HomeMapScene()
@@ -48,7 +52,7 @@ struct HomeMapView: View {
         let s = store.state
         let here = store.here
         return "\(s.visited.count)|\(s.checkins.count)|\(s.firsts.count)|\(s.starred.count)|\(store.osmPlaces.count)|"
-            + "\(store.openBounties.count)|\(store.amenityPoints.count)|\(store.usingRealLocation)|\(Int(here.lat * 2000))|\(Int(here.lng * 2000))"
+            + "\(store.openBounties.count)|\(store.bountyRevision)|\(store.amenityPoints.count)|\(store.usingRealLocation)|\(Int(here.lat * 2000))|\(Int(here.lng * 2000))"
     }
 
     /// New footprints, a new zoom or a moved map rebuild the walked hexes.
@@ -61,7 +65,9 @@ struct HomeMapView: View {
     var body: some View {
         GeometryReader { geo in
             HomeMapCanvas(position: position, scene: scene, revision: revision,
-                          onCamera: cameraMoved, onPin: pick, onBounty: onBounty, onAmenity: pickAmenity)
+                          onCamera: cameraMoved, onPin: pick, onBounty: onBounty, onAmenity: pickAmenity,
+                          onMapItem: { onPick(LocationSearch.register($0, store: store)) },
+                          onUserMove: { position = $0 })
                 .equatable()
                 .onAppear { width = geo.size.width }
                 .onChange(of: geo.size.width) { _, value in width = value }
@@ -84,6 +90,8 @@ struct HomeMapView: View {
             commit { $0.footHexes = hexes }
         }
         .task { await WorldPlaces.load(around: store.here, store: store) }
+        .onChange(of: destinations) { commit(refreshPins) }
+        .onChange(of: selectedDestination) { commit(refreshPins) }
         .onChange(of: pinKey) { commit(refreshPins) }
         .onChange(of: filter) { commit(refreshPins) }
         .onChange(of: amenities) { commit(refreshPins) }
@@ -97,6 +105,7 @@ struct HomeMapView: View {
 
     private func cameraMoved(_ next: MKCoordinateRegion) {
         region = next
+        onCamera(next)
         zoom = HomeMapZoom.level(for: next, width: width)
         let recut = layerZoom != zoom || !Self.covers(layerRegion, next)
         if recut {
@@ -144,6 +153,14 @@ struct HomeMapView: View {
         var pins = HomeMapWorld.pins(store: store, box: box, zoom: zoom, filter: filter)
         // With amenities on, place names step back so the amenity labels read clearly.
         if !amenities.isEmpty { for i in pins.indices { pins[i].label = false } }
+        let highlighted = destinations + (selectedDestination.map { [$0] } ?? [])
+        let ids = Set(highlighted.map(\.id))
+        pins.removeAll { ids.contains($0.placeID) }
+        var seen: Set<String> = []
+        for place in highlighted where seen.insert(place.id).inserted {
+            pins.append(HomePin(id: place.id, placeID: place.id, name: place.name, coord: place.coords,
+                                kind: .destination, glyph: "mappin", pulses: false, label: true))
+        }
         scene.pins = pins
         scene.amenities = HomeMapWorld.amenityPins(store: store, box: box, zoom: zoom, kinds: amenities)
         scene.dimsPins = !amenities.isEmpty && !scene.amenities.isEmpty

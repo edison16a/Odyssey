@@ -74,6 +74,9 @@ struct AdventureCompleteView: View {
     }
 
     private var headline: (title: String, sub: String) {
+        if result.tooFar {
+            return ("Video saved", "You were \(Format.distance(result.rewards.metres)) from \(place.name). Check in within \(Int(Rewards.checkInRadius)) m to earn coins.")
+        }
         if !result.fresh { return ("Saved", "You already explored \(place.name) today, so rewards were counted earlier.") }
         if result.first { return ("Adventure Complete!", "You are the first explorer at \(place.name). Your name stays on it for good.") }
         return ("Adventure Complete!", "You've explored somewhere new.")

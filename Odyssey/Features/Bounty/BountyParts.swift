@@ -14,16 +14,19 @@ import SwiftUI
 enum BountyText {
     /// The place's name, or the area's.
     static func whereText(_ b: Bounty, store: AppStore) -> String {
-        if b.target.kind == "place", let id = b.target.placeId { return store.place(id)?.name ?? id }
+        if b.target.kind == "place", let id = b.target.placeId { return store.place(id)?.name ?? b.target.name ?? id }
         return b.target.name ?? ""
     }
 
     /// One line on how the money is shared.
     static func splitLine(_ b: Bounty, store: AppStore) -> String {
-        if b.split == "even" {
-            return "Split evenly between everyone who records, about \(Format.money(store.bountySlice(b))) each so far"
+        if b.isFunded {
+            return "Up to \(b.maxExplorers ?? b.videos) explorers · estimated \(Format.money(store.bountySlice(b))) each. Payouts are not yet available."
         }
-        return "\(Format.money(store.bountySlice(b))) for every walkthrough you share"
+        if b.split == "even" {
+            return "Demo allocation: split evenly, about \(Format.money(store.bountySlice(b))) each so far"
+        }
+        return "Demo reward: \(Format.money(store.bountySlice(b))) per walkthrough"
             + (b.firstBonus > 0 ? ", plus \(Format.money(b.firstBonus)) for the first one" : "")
     }
 }
@@ -52,7 +55,7 @@ struct BountyProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("\(bounty.recorded) of \(bounty.videos) walkthroughs").font(.system(size: 13, weight: .bold))
+                Text(bounty.isFunded ? "Up to \(bounty.maxExplorers ?? bounty.videos) eligible explorers" : "\(bounty.recorded) of \(bounty.videos) walkthroughs").font(.system(size: 13, weight: .bold))
                 Spacer()
                 Text(bounty.split == "even" ? "\(bounty.crew.count) explorers in" : "\(Format.money(store.bountyLeft(bounty))) left")
                     .font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -87,14 +90,14 @@ struct BountyCard: View {
                     .foregroundStyle(Palette.ink)
                     .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
-                Text(bounty.sponsor + ", " + BountyText.whereText(bounty, store: store))
+                Text((bounty.isFunded ? "" : "Demo · ") + bounty.sponsor + ", " + BountyText.whereText(bounty, store: store))
                     .font(.system(size: 11))
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
                 BountyProgressView(bounty: bounty)
                 HStack(spacing: 4) {
                     Image(systemName: "clock").font(.system(size: 10, weight: .semibold))
-                    Text("\(bounty.days) days left").font(.system(size: 11))
+                    Text("\(bounty.daysRemaining) days left").font(.system(size: 11))
                 }
                 .foregroundStyle(Palette.muted)
             }

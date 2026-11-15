@@ -100,8 +100,8 @@ struct DealCard: View {
                         Image(systemName: "ticket.fill").font(.system(size: 13, weight: .bold))
                         Text("View code").font(.system(size: 15, weight: .heavy))
                     } else {
-                        WhopMark(size: 20)
-                        Text("Claim with Whop").font(.system(size: 15, weight: .heavy))
+                        if deal.isFree { CoinIcon(size: 18) } else { WhopMark(size: 20) }
+                        Text(deal.isFree ? "Buy for \(deal.priceText)" : "Buy with Whop").font(.system(size: 15, weight: .heavy))
                     }
                 }
                 .foregroundStyle(claimed ? Palette.ink : .white)

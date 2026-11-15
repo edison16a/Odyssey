@@ -26,14 +26,13 @@ struct HomeMapPaint: Hashable {
     var round = false
 }
 
-/// One annotation on the home map: a place, an amenity, a city label, a bounty or you.
+/// One annotation on the home map: a place, an amenity, a city label or a bounty.
 nonisolated final class HomeMapMark: NSObject, MKAnnotation, @unchecked Sendable {
     enum Content: Equatable {
         case pin(HomePin)
         case amenity(HomeAmenityPin)
         case label(name: String, explored: Bool)
         case bounty(Bounty)
-        case me
     }
 
     let key: String
@@ -52,29 +51,62 @@ final class HomeMapEngine: NSObject, MKMapViewDelegate {
     var onPin: (String) -> Void = { _ in }
     var onBounty: (Bounty) -> Void = { _ in }
     var onAmenity: (String) -> Void = { _ in }
+    var onMapItem: (MKMapItem) -> Void = { _ in }
+    var onUserMove: (MapCameraPosition) -> Void = { _ in }
     var position: MapCameraPosition?
     var revision = -1
+    /// The last camera a map reported after being moved by hand. Two maps can share one
+    /// position (the Home preview and the World Map tab); the other one leaves it alone.
+    static var movedByHand: MapCameraPosition?
 
     private var groups: [String: (signature: Int, overlay: MKOverlay)] = [:]
     private var paints: [ObjectIdentifier: HomeMapPaint] = [:]
     private var marks: [String: HomeMapMark] = [:]
     private var dimsPins = false
+    private var byHand = false
+    private var lookup: Task<Void, Never>?
 
     // MARK: Camera
 
-    func move(_ map: MKMapView, to position: MapCameraPosition) {
+    func move(_ map: MKMapView, to position: MapCameraPosition, animated: Bool) {
         if let camera = position.camera {
-            map.camera = MKMapCamera(lookingAtCenter: camera.centerCoordinate, fromDistance: camera.distance,
-                                     pitch: camera.pitch, heading: camera.heading)
+            let next = MKMapCamera(lookingAtCenter: camera.centerCoordinate, fromDistance: camera.distance,
+                                   pitch: camera.pitch, heading: camera.heading)
+            if animated {
+                UIView.animate(withDuration: 0.7, delay: 0, options: [.curveEaseInOut]) { map.camera = next }
+            } else {
+                map.camera = next
+            }
+        } else if let rect = position.rect {
+            map.setVisibleMapRect(rect, animated: animated)
         } else if let region = position.region {
-            map.setRegion(region, animated: false)
+            map.setRegion(region, animated: animated)
         }
+    }
+
+    func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+        // A gesture under way on the map's own view means a finger is moving it.
+        let gestures = mapView.subviews.first?.gestureRecognizers ?? []
+        if gestures.contains(where: { $0.state == .began || $0.state == .changed || $0.state == .ended }) { byHand = true }
     }
 
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
         let region = mapView.region
+        var moved: MapCameraPosition?
+        if byHand {
+            byHand = false
+            let camera = mapView.camera
+            let next = MapCameraPosition.camera(MapCamera(centerCoordinate: camera.centerCoordinate, distance: camera.centerCoordinateDistance,
+                                                          heading: camera.heading, pitch: camera.pitch))
+            position = next
+            Self.movedByHand = next
+            moved = next
+        }
         // This can fire while SwiftUI is still updating the view; report it right after.
-        DispatchQueue.main.async { [weak self] in self?.onCamera(region) }
+        DispatchQueue.main.async { [weak self] in
+            if let moved { self?.onUserMove(moved) }
+            self?.onCamera(region)
+        }
     }
 
     // MARK: Scene
@@ -228,7 +260,6 @@ final class HomeMapEngine: NSObject, MKMapViewDelegate {
         for pin in scene.amenities {
             wanted.append(("amenity-" + pin.id, .amenity(pin), pin.coord.location))
         }
-        if !scene.showsUser { wanted.append(("me", .me, scene.me.location)) }
 
         let dimChanged = dimsPins != scene.dimsPins
         dimsPins = scene.dimsPins
@@ -260,9 +291,6 @@ final class HomeMapEngine: NSObject, MKMapViewDelegate {
 
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
         guard let mark = annotation as? HomeMapMark else { return nil }
-        if mark.content == .me {
-            return mapView.dequeueReusableAnnotationView(withIdentifier: HomeMapMeView.reuseID, for: mark)
-        }
         let view = mapView.dequeueReusableAnnotationView(withIdentifier: HomeMapMarkerView.reuseID, for: mark)
         (view as? HomeMapMarkerView)?.show(mark, dimmed: dimsPins)
         return view
@@ -270,12 +298,32 @@ final class HomeMapEngine: NSObject, MKMapViewDelegate {
 
     func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
         mapView.deselectAnnotation(annotation, animated: false)
+        if let feature = annotation as? MKMapFeatureAnnotation {
+            open(feature)
+            return
+        }
         guard let mark = annotation as? HomeMapMark else { return }
         switch mark.content {
         case .pin(let pin): onPin(pin.placeID)
         case .amenity(let pin): onAmenity(pin.id)
         case .bounty(let bounty): onBounty(bounty)
-        case .label, .me: break
+        case .label: break
+        }
+    }
+
+    /// A place on Apple's own map was tapped: look it up and hand it on.
+    private func open(_ feature: MKMapFeatureAnnotation) {
+        lookup?.cancel()
+        lookup = Task { [weak self] in
+            let item: MKMapItem
+            if let found = try? await MKMapItemRequest(mapFeatureAnnotation: feature).mapItem {
+                item = found
+            } else {
+                item = MKMapItem(placemark: MKPlacemark(coordinate: feature.coordinate))
+                item.name = feature.title ?? "Selected location"
+            }
+            guard !Task.isCancelled else { return }
+            self?.onMapItem(item)
         }
     }
 }
@@ -349,8 +397,6 @@ final class HomeMapMarkerView: MKAnnotationView {
             alpha = 1
             isEnabled = true
             accessibilityLabel = bounty.sponsor
-        case .me:
-            return
         }
         isAccessibilityElement = true
 
@@ -365,7 +411,8 @@ final class HomeMapMarkerView: MKAnnotationView {
         if let pinSide {
             // The pin sits at the left of the picture; keep its middle on the coordinate.
             centerOffset = CGPoint(x: size.width / 2 - (pad + pinSide / 2), y: 0)
-            touch = CGRect(x: pad - 4, y: pad - 4, width: pinSide + 8, height: pinSide + 8)
+            // A full 44 point target around the pin.
+            touch = CGRect(x: pad + pinSide / 2 - 22, y: size.height / 2 - 22, width: 44, height: 44)
         } else {
             centerOffset = .zero
             touch = isEnabled ? CGRect(origin: .zero, size: size).insetBy(dx: pad - 4, dy: pad - 4) : .zero
@@ -380,62 +427,5 @@ final class HomeMapMarkerView: MKAnnotationView {
         let renderer = ImageRenderer(content: view.padding(pad))
         renderer.scale = scale
         return renderer.uiImage
-    }
-}
-
-/// The blue "you are here" dot for the demo spot, with its slow pulse.
-final class HomeMapMeView: MKAnnotationView {
-    static let reuseID = "home-me"
-    private let halo = CALayer()
-    private let dot = CALayer()
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        let blue = UIColor(Color(hex: "#1a73e8"))
-        frame = CGRect(x: 0, y: 0, width: 44, height: 44)
-        displayPriority = .required
-        collisionMode = .none
-        isEnabled = false
-        zPriority = MKAnnotationViewZPriority(rawValue: 500)
-
-        halo.frame = CGRect(x: 11, y: 11, width: 22, height: 22)
-        halo.cornerRadius = 11
-        halo.backgroundColor = blue.withAlphaComponent(0.35).cgColor
-        layer.addSublayer(halo)
-
-        dot.frame = CGRect(x: 14, y: 14, width: 16, height: 16)
-        dot.cornerRadius = 8
-        dot.backgroundColor = blue.cgColor
-        dot.borderColor = UIColor.white.cgColor
-        dot.borderWidth = 3
-        dot.shadowColor = UIColor.black.cgColor
-        dot.shadowOpacity = 0.3
-        dot.shadowRadius = 3
-        dot.shadowOffset = CGSize(width: 0, height: 2)
-        dot.shadowPath = UIBezierPath(ovalIn: dot.bounds).cgPath
-        layer.addSublayer(dot)
-        accessibilityLabel = "You"
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        halo.removeAnimation(forKey: "pulse")
-        guard window != nil else { return }
-        let grow = CABasicAnimation(keyPath: "transform.scale")
-        grow.fromValue = 1
-        grow.toValue = 2
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 1
-        fade.toValue = 0
-        let pulse = CAAnimationGroup()
-        pulse.animations = [grow, fade]
-        pulse.duration = 2.2
-        pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        pulse.isRemovedOnCompletion = false
-        halo.add(pulse, forKey: "pulse")
     }
 }

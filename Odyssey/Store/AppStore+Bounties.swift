@@ -26,8 +26,15 @@ extension AppStore {
     /// Every bounty, yours first, with your progress folded in.
     var bounties: [Bounty] {
         let mine = Set(state.myBounties.map(\.id))
-        let live = liveBounties.filter { !mine.contains($0.id) }
-        return (state.myBounties + live + extras.bounties).map { b in
+        let liveIDs = Set(liveBounties.map(\.id))
+        let local = state.myBounties.filter { !liveIDs.contains($0.id) }
+        let live = liveBounties.map { value in
+            var out = value
+            if mine.contains(value.id) { out.mine = true }
+            return out
+        }
+        var seen: Set<String> = []
+        return (local + live + extras.bounties).filter { seen.insert($0.id).inserted }.map { b in
             var out = b
             let p = state.bountyProgress[b.id] ?? AppState.BountyProgress()
             if p.recorded > 0 && !b.crew.contains("me") { out.crew = b.crew + ["me"] }
@@ -39,12 +46,15 @@ extension AppStore {
 
     func bounty(_ id: String) -> Bounty? { bounties.first { $0.id == id } }
 
-    var openBounties: [Bounty] { bounties.filter { $0.recorded < $0.videos } }
+    var openBounties: [Bounty] { bounties.filter { $0.active != false && !$0.isExpired && $0.recorded < ($0.maxExplorers ?? $0.videos) } }
 
     var myPostedBounties: [Bounty] { bounties.filter { $0.mine == true } }
 
     /// What one walkthrough pays: a share per video, or an even slice of the pool.
     func bountySlice(_ b: Bounty) -> Double {
+        if let maximum = b.maxExplorers {
+            return floor(b.pool * 100 / Double(max(1, maximum))) / 100
+        }
         if b.split == "even" {
             return roundCash(b.pool / Double(max(1, b.crew.count + (b.crew.contains("me") ? 0 : 1))))
         }
@@ -59,14 +69,26 @@ extension AppStore {
 
     /// The open bounty that covers a place, by place first, then by area.
     func bounty(for place: Place) -> Bounty? {
-        let list = openBounties
-        return list.first { $0.target.kind == "place" && $0.target.placeId == place.id }
-            ?? list.first { $0.target.kind == "area" && $0.center.distance(to: place.coords) <= $0.radius }
+        bounty(for: place, in: openBounties)
+    }
+
+    /// The same, against a list worked out ahead: ranking every pin on the map
+    /// would otherwise rebuild the whole bounty list once per place.
+    func bounty(for place: Place, in list: [Bounty]) -> Bounty? {
+        return list.first { bounty in
+            guard bounty.target.kind == "place" else { return false }
+            if bounty.target.placeId == place.id { return true }
+            // A venue can have an Apple Maps ID on one phone and an OSM ID on another.
+            let name = bounty.target.place?.name ?? bounty.target.name ?? ""
+            return !name.isEmpty && bounty.center.distance(to: place.coords) <= 40 &&
+                name.compare(place.name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
+            ?? list.first { ["area", "street", "city"].contains($0.target.kind) && $0.center.distance(to: place.coords) <= $0.radius }
     }
 
     /// Pay out for a walkthrough recorded at a place, if a bounty covers it.
     func bountyPayout(for place: Place) -> BountyPayout? {
-        guard let b = bounty(for: place) else { return nil }
+        guard let b = bounty(for: place), !b.isFunded, !b.isExpired else { return nil }
         let first = b.recorded == 0 && b.firstBonus > 0
         let amount = b.split == "even" ? 0 : roundCash(bountySlice(b) + (first ? b.firstBonus : 0))
         update { s in
@@ -78,24 +100,9 @@ extension AppStore {
         return BountyPayout(bounty: updated, amount: amount, first: first, pending: b.split == "even" ? bountySlice(updated) : 0)
     }
 
-    /// Post a bounty as a business.
-    @discardableResult
-    func postBounty(_ draft: Bounty) -> Bounty {
-        var b = draft
-        b.id = "b-mine-\(Int(Date().timeIntervalSince1970 * 1000))"
-        b.recorded = 0
-        b.crew = []
-        b.mine = true
-        update { s in s.myBounties.insert(b, at: 0) }
-        Cloud.shared.recordBounty(b)
-        return b
-    }
-
     /// A bounty paid through Whop: the server already has it live, so just show it as yours.
     func addPaidBounty(_ paid: Bounty) {
         var b = paid
-        b.recorded = 0
-        b.crew = []
         b.mine = true
         update { s in
             s.myBounties.removeAll { $0.id == b.id }

@@ -36,8 +36,9 @@ struct PlaceOverviewTab: View {
                 SectionHeader(title: "From walkthroughs")
                 PlaceWalkthroughCard(place: place, total: history?.total)
             }
+            PlaceAmenityDetails(place: place)
             PlaceDetailsCard(place: place)
-            if place.isOSM {
+            if place.isOSM || place.fromAppleMaps {
                 Text(place.fromAppleMaps ? "Place data from Apple Maps" : "Place data from OpenStreetMap contributors")
                     .font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
