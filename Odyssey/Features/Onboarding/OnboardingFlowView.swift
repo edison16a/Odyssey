@@ -22,6 +22,7 @@ struct OnboardingFlowView: View {
     @State private var answers: [String: Bool] = [:]
     /// Thumbnails from the photo library (or bundled place photos) that feed the gem animation.
     @State private var photos: [UIImage] = []
+    @State private var scan = PhotoScan()
 
     var body: some View {
         ZStack {
@@ -40,9 +41,9 @@ struct OnboardingFlowView: View {
                 case .location:
                     OnboardingLocationStep(done: { go(.connect) })
                 case .connect:
-                    OnboardingConnectStep(photos: $photos, done: { go(.compile) })
+                    OnboardingConnectStep(photos: $photos, scan: $scan, done: { go(.compile) })
                 case .compile:
-                    OnboardingCompileStep(photos: photos, done: { go(.reveal) })
+                    OnboardingCompileStep(photos: photos, scan: scan, done: { go(.reveal) })
                 case .reveal:
                     OnboardingRevealStep(done: { go(.opening) })
                 case .opening:

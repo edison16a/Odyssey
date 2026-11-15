@@ -90,9 +90,9 @@ nonisolated struct AppState: Codable, Sendable {
         var gps: Bool?
     }
 
-    var version = 5
+    var version = 6
     var session = Session()
-    var interests: [String: Bool] = ["food": true, "books": true, "travel": true]
+    var interests: [String: Bool] = ["startups": true, "coffee": true, "culture": true]
     var user = User()
     var wallet = Wallet()
     var streak = Streak()
@@ -192,6 +192,11 @@ nonisolated struct AppState: Codable, Sendable {
         version = value(.version, d.version)
         session = value(.session, d.session)
         interests = value(.interests, d.interests)
+        // Version 6 swapped the books and travel questions for startups and cafes.
+        if version < 6 {
+            interests = d.interests
+            version = d.version
+        }
         user = value(.user, d.user)
         wallet = value(.wallet, d.wallet)
         streak = value(.streak, d.streak)

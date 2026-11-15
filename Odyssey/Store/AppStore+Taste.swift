@@ -20,11 +20,12 @@ extension AppStore {
     private static let curated: [String: [String]] = [
         "cafe": ["coffee", "study"], "food": ["food"], "library": ["library", "study"], "books": ["shopping"],
         "outdoors": ["park"], "museum": ["entertainment"], "landmark": ["entertainment"], "market": ["food", "shopping"],
-        "gym": ["fitness"], "campus": ["study"], "office": ["study"], "transit": [],
+        "gym": ["fitness"], "campus": ["study", "startup"], "office": ["startup", "study"], "transit": [],
     ]
     private static let interestCats: [String: [String]] = [
         "food": ["food", "coffee", "dessert"], "books": ["library", "study"], "outdoors": ["park"],
         "culture": ["entertainment"], "nightlife": ["nightlife"], "travel": ["entertainment", "park"],
+        "startups": ["startup", "study"], "coffee": ["coffee"],
     ]
     static let phrase: [String: String] = [
         "indie": "independent", "chain": "big chains", "wifi": "wifi", "outdoor": "outdoor seating", "quiet": "quiet",
@@ -33,6 +34,7 @@ extension AppStore {
     private static let interestName: [String: String] = [
         "food": "good food", "books": "books", "outdoors": "the outdoors", "culture": "art and culture",
         "nightlife": "nights out", "travel": "new places",
+        "startups": "startups", "coffee": "cafes",
     ]
     private static let own = ["hidden", "indie", "outdoor", "wifi", "vegan", "late", "quiet", "accessible"]
 
@@ -108,7 +110,7 @@ extension AppStore {
     /// The onboarding interest this place fits, if any.
     func interest(for place: Place) -> String? {
         let cats = tasteCategories(place)
-        let order = ["food", "books", "outdoors", "culture", "travel", "nightlife"]
+        let order = ["startups", "coffee", "culture", "food", "books", "outdoors", "travel", "nightlife"]
         return order.first { key in
             (state.interests[key] ?? false) && (AppStore.interestCats[key] ?? []).contains { cats.contains($0) }
         }

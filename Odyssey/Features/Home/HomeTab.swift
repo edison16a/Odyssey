@@ -126,13 +126,14 @@ struct HomeRewardsHeader: View {
                 Button { router.push(.ranks) } label: {
                     HStack(spacing: 8) {
                         ZStack {
-                            Circle().stroke(Palette.surface3, lineWidth: 4)
+                            Circle().stroke(Palette.surface3, lineWidth: 2.5)
                             Circle().trim(from: 0, to: rank.progress)
-                                .stroke(Color(hex: rank.current.color), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                .stroke(Color(hex: rank.current.color), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                                 .rotationEffect(.degrees(-90))
-                            Text("\(rank.tier + 1)").font(.system(size: 11, weight: .heavy))
+                            RankEmblem(tier: rank.tier, size: 22)
                         }
-                        .frame(width: 26, height: 26)
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(rank.current.name).font(.system(size: 13, weight: .heavy)).lineLimit(1)
                             Text(rank.next.map { _ in "\(rank.toNext) XP to next" } ?? "Top rank")
@@ -483,7 +484,7 @@ struct HomeExploredMapCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "Your world in 3D", link: "Open map") { router.present(.exploredMap(focus: nil)) }
+            SectionHeader(title: "World Map", link: "Open map") { router.present(.exploredMap(focus: nil)) }
             ZStack(alignment: .bottomLeading) {
                 HomeMapView(position: $position, zoom: $zoom, filter: "all", onPick: onPick, onBounty: onBounty,
                             amenities: amenities, onAmenity: { point in
@@ -494,8 +495,6 @@ struct HomeExploredMapCard: View {
                     HomeAmenityChips(kinds: $amenities)
                         .padding(.top, 10)
                     Spacer()
-                    HomeNearestBathroomButton(action: nearestBathroom)
-                        .padding(.horizontal, 10)
                     HStack {
                         HomeFootprintChip()
                         Spacer()
@@ -524,17 +523,4 @@ struct HomeExploredMapCard: View {
         }
     }
 
-    /// Turn bathrooms on, fly to the closest one and open its card.
-    private func nearestBathroom() {
-        Haptics.tap()
-        guard let point = HomeMapWorld.nearest("bathroom", store: store) else {
-            toast.show("Bathrooms are still loading", icon: "toilet.fill")
-            return
-        }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { _ = amenities.insert("bathroom") }
-        withAnimation(.easeInOut(duration: 1.1)) {
-            position = .camera(MapCamera(centerCoordinate: point.coord.location, distance: 900, heading: 20, pitch: 55))
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { amenityOpen = point }
-    }
 }
