@@ -41,6 +41,7 @@ struct HomeTab: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
                     HomeRecommendations(onPick: { preview = $0 }, part: .more)
+                    HomeDealsShelf()
                     TabBarSpacer()
                 }
             }
@@ -470,23 +471,39 @@ struct HomeRecCard: View {
 struct HomeExploredMapCard: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
+    @Environment(ToastCenter.self) private var toast
     var onPick: (Place) -> Void
     var onBounty: (Bounty) -> Void
     @State private var position: MapCameraPosition = .automatic
     @State private var zoom = 14
     @State private var centered = false
+    /// Amenity kinds switched on over the map.
+    @State private var amenities: Set<String> = []
+    @State private var amenityOpen: AmenityPoint?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: "Your world in 3D", link: "Open map") { router.present(.exploredMap(focus: nil)) }
             ZStack(alignment: .bottomLeading) {
-                HomeMapView(position: $position, zoom: $zoom, filter: "all", onPick: onPick, onBounty: onBounty)
-                HStack {
-                    HomeFootprintChip()
+                HomeMapView(position: $position, zoom: $zoom, filter: "all", onPick: onPick, onBounty: onBounty,
+                            amenities: amenities, onAmenity: { point in
+                                Haptics.tap()
+                                amenityOpen = point
+                            })
+                VStack(alignment: .leading, spacing: 8) {
+                    HomeAmenityChips(kinds: $amenities)
+                        .padding(.top, 10)
                     Spacer()
-                    HomeMapLegend()
+                    HomeNearestBathroomButton(action: nearestBathroom)
+                        .padding(.horizontal, 10)
+                    HStack {
+                        HomeFootprintChip()
+                        Spacer()
+                        HomeMapLegend()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
                 }
-                .padding(10)
             }
             .frame(height: 440)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
@@ -499,5 +516,25 @@ struct HomeExploredMapCard: View {
             // Tilted so the explored buildings stand up in 3D.
             position = .camera(MapCamera(centerCoordinate: center.location, distance: 1500, heading: 20, pitch: 62))
         }
+        .sheet(item: $amenityOpen) { point in
+            AmenitySheet(point: point)
+                .presentationDetents([.height(330)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+        }
+    }
+
+    /// Turn bathrooms on, fly to the closest one and open its card.
+    private func nearestBathroom() {
+        Haptics.tap()
+        guard let point = HomeMapWorld.nearest("bathroom", store: store) else {
+            toast.show("Bathrooms are still loading", icon: "toilet.fill")
+            return
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { _ = amenities.insert("bathroom") }
+        withAnimation(.easeInOut(duration: 1.1)) {
+            position = .camera(MapCamera(centerCoordinate: point.coord.location, distance: 900, heading: 20, pitch: 55))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { amenityOpen = point }
     }
 }

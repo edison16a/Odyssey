@@ -41,6 +41,7 @@ struct HomePlacePreview: View {
                     Spacer(minLength: 0)
                     ThumbsView(place: place)
                 }
+                PlaceDealsSection(place: place)
                 contributorList
                 status(info)
                 bountyCallout
