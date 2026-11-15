@@ -10,8 +10,18 @@
 import Foundation
 
 extension AppStore {
+    /// Worked out once per place: the Explore feed asks for every card on every redraw,
+    /// and the rules below run several pattern matches each.
     func amenities(of place: Place) -> [String] {
         if let tags = placeFeatures[place.id], !tags.isEmpty { return tags }
+        let stamp = placeFeatures.count
+        if let hit = amenityCache[place.id], hit.stamp == stamp { return hit.tags }
+        let tags = guessAmenities(of: place)
+        amenityCache[place.id] = (stamp, tags)
+        return tags
+    }
+
+    private func guessAmenities(of place: Place) -> [String] {
         let cats = ([place.category ?? ""] + (place.cats ?? []) + [placeKind(place).label]).joined(separator: " ").lowercased()
         let r = StableHash.generator(place.id + "amenity")
         var out: [String] = []

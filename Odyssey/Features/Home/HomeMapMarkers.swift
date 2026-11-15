@@ -2,36 +2,14 @@
 //  HomeMapMarkers.swift
 //  Odyssey
 //
-//  Small markers drawn on the home map: the blue dot for where you are
-//  standing in the demo, the city and state name pills, the place pins and
-//  the gold pin for places you starred.
+//  Small markers drawn on the home map: the city and state name pills, the
+//  place pins and the gold pin for places you starred. The map shows them
+//  as cached pictures (HomeMapEngine.swift), so they must draw from their
+//  own values only.
 //
 
 import Foundation
 import SwiftUI
-
-/// The blue "you are here" dot for the demo spot.
-struct HomeMeDot: View {
-    @State private var pulse = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color(hex: "#1a73e8").opacity(0.35))
-                .frame(width: 22, height: 22)
-                .scaleEffect(pulse ? 2 : 1)
-                .opacity(pulse ? 0 : 1)
-            Circle()
-                .fill(Color(hex: "#1a73e8"))
-                .frame(width: 16, height: 16)
-                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-        }
-        .onAppear {
-            withAnimation(.easeOut(duration: 2.2).repeatForever(autoreverses: false)) { pulse = true }
-        }
-    }
-}
 
 /// City and state name pills: blue with a check once explored, white with a lock before.
 struct HomeRegionPill: View {

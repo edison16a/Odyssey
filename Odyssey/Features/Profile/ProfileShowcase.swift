@@ -48,7 +48,7 @@ struct ProfileShowcaseGrid: View {
     // MARK: Cards
 
     private var miles: some View {
-        let km = store.state.stats.km
+        let km = store.kmWalked
         return tile(background: Palette.ink, foreground: .white, minHeight: 132, action: { router.present(.globe) }) {
             label("footprints", "Traveled this year")
             Spacer(minLength: 4)

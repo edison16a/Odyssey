@@ -66,16 +66,21 @@ nonisolated enum FootGrid {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: (count: Int, last: Coord?, cells: Set<FootCell>)?
 
-    /// The hexes for a path, worked out once per batch of new points. Safe from any thread,
-    /// so the map can build its overlay in the background.
+    /// The hexes for a path. Safe from any thread, so the map can build its overlay in
+    /// the background. A longer path only works out the new stretch: redoing a long
+    /// walking history on every batch of steps was a visible pause.
     static func cachedCells(_ points: [Coord]) -> Set<FootCell> {
         lock.lock()
-        if let hit = cache, hit.count == points.count, hit.last == points.last {
-            lock.unlock()
-            return hit.cells
-        }
+        let hit = cache
         lock.unlock()
-        let cells = cells(along: points)
+        if let hit, hit.count == points.count, hit.last == points.last { return hit.cells }
+        var cells: Set<FootCell>
+        if let hit, hit.count > 0, points.count > hit.count, points[hit.count - 1] == hit.last {
+            cells = hit.cells
+            cells.formUnion(Self.cells(along: Array(points[(hit.count - 1)...])))
+        } else {
+            cells = Self.cells(along: points)
+        }
         lock.lock()
         cache = (points.count, points.last, cells)
         lock.unlock()
@@ -125,7 +130,8 @@ extension AppStore {
             last = point
         }
         guard !added.isEmpty else { return }
-        update { s in
+        // Quietly: this runs every few seconds of walking and only the map's footprints depend on it.
+        updateQuietly(footprints: true) { s in
             s.footprints += added
             if s.footprints.count > 40_000 { s.footprints.removeFirst(s.footprints.count - 40_000) }
             s.stats.km += metres / 1000
@@ -133,7 +139,16 @@ extension AppStore {
     }
 
     /// The explored hexes, worked out once per batch of new footprints.
-    var footprintCells: Set<FootCell> { FootGrid.cachedCells(state.footprints) }
+    var footprintCells: Set<FootCell> {
+        _ = footprintsRevision
+        return FootGrid.cachedCells(state.footprints)
+    }
+
+    /// Kilometres walked, kept current as footprints are recorded.
+    var kmWalked: Double {
+        _ = footprintsRevision
+        return state.stats.km
+    }
 
     /// Roughly how much ground you have walked, in square kilometres.
     var footprintArea: Double {

@@ -13,6 +13,12 @@
 import Foundation
 import SwiftUI
 
+/// Scroll measurements for the place page, kept where changing them redraws nothing.
+private final class PlaceScroll {
+    var offset: CGFloat = 0
+    var tabsTop: CGFloat = .greatestFiniteMagnitude
+}
+
 struct PlaceView: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
@@ -24,10 +30,12 @@ struct PlaceView: View {
     /// Real contribution history from Convex; the local estimate shows until it arrives.
     @State private var history: PlaceHistory?
     @State private var position = ScrollPosition()
-    @State private var offset: CGFloat = 0
     @State private var viewport: CGFloat = 0
-    /// Where the inline tab bar sits on screen, and whether it has reached the title bar.
-    @State private var tabsTop: CGFloat = .greatestFiniteMagnitude
+    /// How far the page is scrolled and where the inline tab bar sits. These change on
+    /// every frame of a scroll and are only needed when a tab is tapped, so they live
+    /// outside the view's state: as state they redrew the whole page on every frame.
+    @State private var scroll = PlaceScroll()
+    /// Whether the inline tab bar has reached the title bar.
     @State private var tabsPinned = false
 
     var body: some View {
@@ -58,7 +66,7 @@ struct PlaceView: View {
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.frame(in: .named(Self.page)).minY
                         } action: { minY in
-                            tabsTop = minY
+                            scroll.tabsTop = minY
                             let pinned = minY < Self.topBarHeight
                             if pinned != tabsPinned { tabsPinned = pinned }
                         }
@@ -76,7 +84,7 @@ struct PlaceView: View {
             .onScrollGeometryChange(for: CGFloat.self) { geo in
                 geo.contentOffset.y + geo.contentInsets.top
             } action: { _, y in
-                offset = y
+                scroll.offset = y
                 let isScrolled = y > 210
                 if isScrolled != scrolled {
                     withAnimation(.easeOut(duration: 0.2)) { scrolled = isScrolled }
@@ -128,10 +136,10 @@ struct PlaceView: View {
     private func select(_ next: PlaceTab) {
         guard next != tab else { return }
         forward = next.rawValue > tab.rawValue
-        let lift = tabsTop - Self.topBarHeight
+        let lift = scroll.tabsTop - Self.topBarHeight
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { tab = next }
         if tabsPinned && lift < 0 {
-            position.scrollTo(y: max(0, offset + lift))
+            position.scrollTo(y: max(0, scroll.offset + lift))
         }
     }
 

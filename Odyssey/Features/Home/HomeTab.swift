@@ -247,9 +247,7 @@ struct HomeAdventureHero: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { glow = true }
-        }
+        .loops($glow, .easeInOut(duration: 1.4))
     }
 }
 
@@ -348,17 +346,18 @@ struct HomeRecommendations: View {
     var part: Part = .more
 
     var body: some View {
-        let open = store.nearbyPlaces.filter { store.status(of: $0).status != .mine }
-        let near = Array(open.sorted { store.metres(to: $0) < store.metres(to: $1) }.prefix(8))
-        let gems = Array(open.filter { store.status(of: $0).status == .new }.prefix(8))
-        let forYou = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
-        let friends = Array(store.friendAdventures.prefix(8))
+        // Each half only works out its own shelves; both used to build all four lists.
+        let friends = part == .more ? Array(store.friendAdventures.prefix(8)) : []
         VStack(alignment: .leading, spacing: 0) {
             if part == .loved {
+                let forYou = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
                 shelf("Places You'll Love", link: "Discover", places: forYou)
             } else {
-            shelf("Adventures Near You", link: "See all", places: near)
-            shelf("Hidden Gems", link: "Be first · +\(Rewards.first.coins)", places: gems, star: true)
+                let open = store.nearbyPlaces.filter { store.status(of: $0).status != .mine }
+                let near = Array(open.map { ($0, store.metres(to: $0)) }.sorted { $0.1 < $1.1 }.prefix(8).map(\.0))
+                let gems = Array(open.filter { store.status(of: $0).status == .new }.prefix(8))
+                shelf("Adventures Near You", link: "See all", places: near)
+                shelf("Hidden Gems", link: "Be first · +\(Rewards.first.coins)", places: gems, star: true)
             }
             if part == .more, !friends.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {

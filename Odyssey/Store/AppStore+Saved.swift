@@ -30,7 +30,8 @@ extension AppStore {
     func markRecommended(_ places: [Place]) {
         let fresh = places.map(\.id).filter { !state.recommended.contains($0) }
         guard !fresh.isEmpty else { return }
-        update { s in
+        // Quietly: no screen shows this list, and it changes while you swipe the feed.
+        updateQuietly { s in
             s.recommended += fresh
             if s.recommended.count > 400 { s.recommended.removeFirst(s.recommended.count - 400) }
         }

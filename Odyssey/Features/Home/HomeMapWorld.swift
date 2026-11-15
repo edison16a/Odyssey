@@ -98,7 +98,9 @@ nonisolated enum HomeMapWorld {
         }
         let have = Set(candidates.map(\.id))
         candidates += store.starredPlaces.filter { box.contains($0.coords) && !have.contains($0.id) }
-        let ranked = candidates.map { ($0, rank($0, store: store, starred: starred)) }.sorted { $0.1 > $1.1 }.map(\.0)
+        // Worked out once: asking the store per place rebuilt the whole bounty list every time.
+        let bounties = store.openBounties
+        let ranked = candidates.map { ($0, rank($0, store: store, starred: starred, bounties: bounties)) }.sorted { $0.1 > $1.1 }.map(\.0)
 
         // The box is about two screens across; a 6 x 10 grid keeps pins about a thumb apart.
         let cols = 6.0, rows = 10.0
@@ -119,11 +121,15 @@ nonisolated enum HomeMapWorld {
 
     /// How important a place is on the map.
     @MainActor
-    private static func rank(_ place: Place, store: AppStore, starred: Set<String>) -> Double {
+    private static func rank(_ place: Place, store: AppStore, starred: Set<String>, bounties: [Bounty]) -> Double {
         var score = 0.0
         if starred.contains(place.id) { score += 200 }
         if !place.isOSM { score += 100 }
-        if store.bounty(for: place) != nil { score += 60 }
+        let covered = bounties.contains { b in
+            (b.target.kind == "place" && b.target.placeId == place.id)
+                || (b.target.kind == "area" && b.center.distance(to: place.coords) <= b.radius)
+        }
+        if covered { score += 60 }
         if store.status(of: place).status == .mine { score += 20 }
         score += log(1 + Double(place.reviews ?? 0)) * 6 + (place.rating ?? 0) * 2
         return score

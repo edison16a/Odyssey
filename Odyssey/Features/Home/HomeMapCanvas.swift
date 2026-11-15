@@ -3,10 +3,16 @@
 //  Odyssey
 //
 //  The map itself, kept apart from the app state on purpose. Everything it
-//  draws arrives as one plain scene with a revision number, and the view
-//  only redraws when that number or the camera changes. Earning coins or
-//  voting on a place used to make MapKit compare every shape and pin on the
-//  map; now those changes never reach it.
+//  draws arrives as one plain scene with a revision number, and the map is
+//  only touched when that number or the camera changes.
+//
+//  It sits on MKMapView directly rather than SwiftUI's Map. A close in view
+//  holds a couple of thousand hexes, and SwiftUI's Map turns every one into
+//  its own overlay with its own renderer, which is what made the map (and
+//  everything scrolling past it) stutter. Here every shape that shares a
+//  look is drawn together: a handful of overlays, however many hexes there
+//  are. Pins are small cached pictures instead of live views.
+//  The drawing and diffing lives in HomeMapEngine.swift.
 //
 
 import CoreLocation
@@ -45,8 +51,8 @@ struct HomeMapScene {
     var me = Coord(0, 0)
 }
 
-struct HomeMapCanvas: View, Equatable {
-    @Binding var position: MapCameraPosition
+struct HomeMapCanvas: UIViewRepresentable, Equatable {
+    var position: MapCameraPosition
     var scene: HomeMapScene
     var revision: Int
     var onCamera: (MKCoordinateRegion) -> Void
@@ -58,58 +64,32 @@ struct HomeMapCanvas: View, Equatable {
         MainActor.assumeIsolated { a.revision == b.revision && a.position == b.position }
     }
 
-    var body: some View {
-        Map(position: $position) {
-            ForEach(scene.polygons) { p in
-                MapPolygon(coordinates: p.coords)
-                    .foregroundStyle(p.fill)
-                    .stroke(p.stroke, style: StrokeStyle(lineWidth: p.width, dash: p.dash))
-            }
-            ForEach(scene.footHexes) { hex in
-                MapPolygon(coordinates: hex.coords)
-                    .foregroundStyle(HomeMapStyle.blue.opacity(0.4))
-                    .stroke(HomeMapStyle.blue.opacity(0.75), lineWidth: 0.6)
-            }
-            ForEach(scene.circles) { c in
-                MapCircle(center: c.center, radius: c.radius)
-                    .foregroundStyle(c.fill)
-                    .stroke(c.stroke, style: StrokeStyle(lineWidth: c.width, dash: c.dash))
-            }
-            ForEach(scene.lines) { line in
-                MapPolyline(coordinates: line.coords)
-                    .stroke(line.color, style: StrokeStyle(lineWidth: line.width, lineCap: .round, lineJoin: .round, dash: line.dash))
-            }
-            ForEach(scene.labels) { label in
-                Annotation(label.name, coordinate: label.labelAt.location, anchor: .center) {
-                    HomeRegionPill(name: label.name, explored: label.explored)
-                }
-                .annotationTitles(.hidden)
-            }
-            BountyMapContent(bounties: scene.bounties, onPick: onBounty)
-            ForEach(scene.pins) { pin in
-                Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
-                    HomePinView(pin: pin)
-                        .opacity(scene.dimsPins ? 0.4 : 1)
-                        .onTapGesture { onPin(pin.placeID) }
-                }
-                .annotationTitles(.hidden)
-            }
-            ForEach(scene.amenities) { pin in
-                Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
-                    HomeAmenityPinView(pin: pin)
-                        .onTapGesture { onAmenity(pin.id) }
-                }
-                .annotationTitles(.hidden)
-            }
-            if scene.showsUser {
-                UserAnnotation()
-                    .annotationTitles(.hidden)
-            } else {
-                Annotation("You", coordinate: scene.me.location, anchor: .center) { HomeMeDot() }
-                    .annotationTitles(.hidden)
-            }
+    func makeCoordinator() -> HomeMapEngine { HomeMapEngine() }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView(frame: .zero)
+        let configuration = MKStandardMapConfiguration(elevationStyle: .realistic)
+        configuration.pointOfInterestFilter = .excludingAll
+        map.preferredConfiguration = configuration
+        map.delegate = context.coordinator
+        map.register(HomeMapMarkerView.self, forAnnotationViewWithReuseIdentifier: HomeMapMarkerView.reuseID)
+        map.register(HomeMapMeView.self, forAnnotationViewWithReuseIdentifier: HomeMapMeView.reuseID)
+        return map
+    }
+
+    func updateUIView(_ map: MKMapView, context: Context) {
+        let engine = context.coordinator
+        engine.onCamera = onCamera
+        engine.onPin = onPin
+        engine.onBounty = onBounty
+        engine.onAmenity = onAmenity
+        if engine.position != position {
+            engine.position = position
+            engine.move(map, to: position)
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-        .onMapCameraChange(frequency: .onEnd) { context in onCamera(context.region) }
+        if engine.revision != revision {
+            engine.revision = revision
+            engine.apply(scene, to: map)
+        }
     }
 }

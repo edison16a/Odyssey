@@ -174,3 +174,58 @@ struct SeedDataTests {
         #expect(!extras.credits.isEmpty)
     }
 }
+
+/// The store only redraws screens for changes they can show, and the walked hexes are
+/// worked out a stretch at a time. Both exist to keep scrolling smooth.
+@MainActor
+struct PerformanceTests {
+    /// True when a screen that read `read` would redraw after `change`.
+    private func redraws(_ store: AppStore, reading read: () -> Void, after change: () -> Void) -> Bool {
+        let fired = Fired()
+        withObservationTracking(read) { fired.value = true }
+        change()
+        return fired.value
+    }
+
+    private final class Fired: @unchecked Sendable { var value = false }
+
+    @Test func aStateChangeRedrawsScreensThatReadState() {
+        let store = AppStore(preview: true)
+        let fired = redraws(store, reading: { _ = store.state.wallet.coins }, after: {
+            store.update { $0.wallet.coins += 1 }
+        })
+        #expect(fired)
+    }
+
+    @Test func footprintsAndRecommendationsDoNotRedrawEveryScreen() {
+        let store = AppStore(preview: true)
+        let walk = [Coord(37.7600, -122.3900), Coord(37.7604, -122.3900), Coord(37.7608, -122.3900)]
+        let km = store.state.stats.km
+        #expect(redraws(store, reading: { _ = store.state.wallet.coins }, after: { store.recordFootprints(walk) }) == false)
+        #expect(store.state.footprints.count == 3)
+        #expect(store.state.stats.km > km)
+        let place = store.seed.places[0]
+        #expect(redraws(store, reading: { _ = store.state.wallet.coins }, after: { store.markRecommended([place]) }) == false)
+        #expect(store.isRecommended(place))
+    }
+
+    @Test func footprintScreensStillFollowTheWalk() {
+        let store = AppStore(preview: true)
+        let walk = [Coord(37.7600, -122.3900), Coord(37.7604, -122.3900)]
+        #expect(redraws(store, reading: { _ = store.footprintArea }, after: { store.recordFootprints(walk) }))
+        #expect(redraws(store, reading: { _ = store.kmWalked }, after: {
+            store.recordFootprints([Coord(37.7608, -122.3900)])
+        }))
+    }
+
+    @Test func walkedHexesGrowTheSameAsWorkingThemOutFromScratch() {
+        var path: [Coord] = []
+        for i in 0..<400 { path.append(Coord(37.76 + Double(i) * 0.0002, -122.39 + Double(i % 7) * 0.0003)) }
+        _ = FootGrid.cachedCells(Array(path.prefix(150)))
+        let grown = FootGrid.cachedCells(path)
+        #expect(grown == FootGrid.cells(along: path))
+        // A trimmed path (the oldest points dropped) starts over rather than keeping stale hexes.
+        let trimmed = Array(path.dropFirst(100)) + [Coord(37.9, -122.3)]
+        #expect(FootGrid.cachedCells(trimmed) == FootGrid.cells(along: trimmed))
+    }
+}

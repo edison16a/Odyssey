@@ -9,7 +9,8 @@
 //  a pin opens the place preview; tapping a bounty opens its sheet. Your
 //  walked hexes and the world's places come from HomeMapWorld.swift, and
 //  places you starred get a gold pin on top. The drawing itself lives in
-//  HomeMapCanvas.swift, which only redraws when the scene changes.
+//  HomeMapCanvas.swift and HomeMapEngine.swift, which only touch the map
+//  when the scene changes.
 //  Ported from features/home/home-map.js.
 //
 
@@ -33,6 +34,10 @@ struct HomeMapView: View {
     @State private var scene = HomeMapScene()
     @State private var revision = 0
     @State private var region: MKCoordinateRegion?
+    /// The region and zoom the explored shapes were last cut to. They reach well past the
+    /// screen, so a small pan keeps the same shapes and the map has nothing to redraw.
+    @State private var layerRegion: MKCoordinateRegion?
+    @State private var layerZoom: Int?
     @State private var width: CGFloat = 390
 
     /// Changes whenever something on the explored layer could look different.
@@ -48,13 +53,14 @@ struct HomeMapView: View {
 
     /// New footprints, a new zoom or a moved map rebuild the walked hexes.
     private var footKey: String {
-        guard let c = region?.center else { return "\(store.state.footprints.count)" }
-        return "\(store.state.footprints.count)-\(zoom)-\(Int(c.latitude * 2000))-\(Int(c.longitude * 2000))"
+        let walked = "\(store.footprintsRevision)-\(store.state.footprints.count)"
+        guard let c = region?.center else { return walked }
+        return "\(walked)-\(zoom)-\(Int(c.latitude * 2000))-\(Int(c.longitude * 2000))"
     }
 
     var body: some View {
         GeometryReader { geo in
-            HomeMapCanvas(position: $position, scene: scene, revision: revision,
+            HomeMapCanvas(position: position, scene: scene, revision: revision,
                           onCamera: cameraMoved, onPin: pick, onBounty: onBounty, onAmenity: pickAmenity)
                 .equatable()
                 .onAppear { width = geo.size.width }
@@ -62,6 +68,11 @@ struct HomeMapView: View {
         }
         .task(id: signature) {
             layer = await HomeExploredLayer.load(store, key: signature)
+            // Before the map reports where it is looking there is nothing to cut the shapes
+            // to; the first camera report draws them instead of drawing every city at once.
+            guard region != nil else { return }
+            layerRegion = region
+            layerZoom = zoom
             commit { refreshLayer(&$0); refreshPins(&$0) }
         }
         .task(id: footKey) {
@@ -87,7 +98,15 @@ struct HomeMapView: View {
     private func cameraMoved(_ next: MKCoordinateRegion) {
         region = next
         zoom = HomeMapZoom.level(for: next, width: width)
-        commit { refreshLayer(&$0); refreshPins(&$0) }
+        let recut = layerZoom != zoom || !Self.covers(layerRegion, next)
+        if recut {
+            layerRegion = next
+            layerZoom = zoom
+        }
+        commit {
+            if recut { refreshLayer(&$0) }
+            refreshPins(&$0)
+        }
         if zoom >= 14 {
             let center = Coord(next.center)
             Task { await WorldPlaces.load(around: center, store: store) }
@@ -102,10 +121,21 @@ struct HomeMapView: View {
         if let point = store.amenityPoints.first(where: { $0.id == id }) { onAmenity(point) }
     }
 
+    /// True while the screen still sits inside the area the shapes were cut to (the old
+    /// region grown by half on every side), leaving a margin so no edge shows.
+    private static func covers(_ old: MKCoordinateRegion?, _ next: MKCoordinateRegion) -> Bool {
+        guard let old else { return false }
+        guard next.span.latitudeDelta <= old.span.latitudeDelta * 1.25,
+              next.span.longitudeDelta <= old.span.longitudeDelta * 1.25 else { return false }
+        let dLat = abs(next.center.latitude - old.center.latitude) + next.span.latitudeDelta / 2
+        let dLng = abs(next.center.longitude - old.center.longitude) + next.span.longitudeDelta / 2
+        return dLat <= old.span.latitudeDelta * 0.85 && dLng <= old.span.longitudeDelta * 0.85
+    }
+
     private func refreshLayer(_ scene: inout HomeMapScene) {
-        scene.polygons = layer.polygons(zoom: zoom, region: region)
-        scene.circles = layer.circles(zoom: zoom, region: region)
-        scene.lines = layer.mapLines(zoom: zoom, region: region)
+        scene.polygons = layer.polygons(zoom: zoom, region: layerRegion)
+        scene.circles = layer.circles(zoom: zoom, region: layerRegion)
+        scene.lines = layer.mapLines(zoom: zoom, region: layerRegion)
         scene.labels = layer.labels(zoom: zoom)
     }
 
