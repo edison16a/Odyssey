@@ -174,3 +174,102 @@ struct SeedDataTests {
         #expect(!extras.credits.isEmpty)
     }
 }
+
+@MainActor
+struct WorldMapAndFundingTests {
+    @Test func friendsLinksKeepTheExistingFriendsScreen() {
+        let store = AppStore(preview: true)
+        let router = AppRouter()
+        router.open(URL(string: "odyssey://friends")!, store: store)
+        #expect(router.tab == .home)
+        #expect(router.path(.home) == [.friends])
+        #expect(AppTab.allCases == [.home, .worldMap, .explore, .profile])
+    }
+
+    @Test func oldMapLinksSelectTheSharedWorldMap() {
+        let router = AppRouter()
+        router.present(.exploredMap(focus: "trip"))
+        #expect(router.tab == .worldMap)
+        #expect(router.cover == nil)
+        #expect(router.worldMapFocus == "trip")
+    }
+
+    @Test func movingTheCameraOrPhoneDoesNotReplaceTheBountyTarget() {
+        let store = AppStore(preview: true)
+        let remote = store.place("doe")!
+        let map = store.worldMap
+        map.select(remote)
+        map.bountyTarget = remote
+        map.fly(to: Coord(48.8566, 2.3522))
+        store.deviceLocation = Coord(37.7749, -122.4194)
+        #expect(map.selectedPlace?.id == remote.id)
+        #expect(map.bountyTarget?.coords == remote.coords)
+        #expect(map.position.camera?.centerCoordinate.latitude == 48.8566)
+    }
+
+    @Test func olderBountiesDecodeWithoutNewFields() throws {
+        let original = SeedExtras.shared.bounties[0]
+        let decoded = try JSONDecoder().decode(Bounty.self, from: JSONEncoder().encode(original))
+        #expect(decoded.maxExplorers == nil)
+        #expect(decoded.durationDays == nil)
+        #expect(decoded.daysRemaining == original.days)
+    }
+
+    @Test func fundedBountiesNeverCreditAnUnverifiedPayout() {
+        let store = AppStore(preview: true)
+        let place = store.place("greek-theatre")!
+        var funded = store.bounty("b-greek")!
+        funded.id = "funded-test"
+        funded.paidWith = "whop"
+        funded.maxExplorers = 6
+        funded.pool = 100
+        funded.expiresAt = Date().addingTimeInterval(86400).timeIntervalSince1970 * 1000
+        store.liveBounties = [funded]
+        let cash = store.state.wallet.cash
+        #expect(store.bountySlice(funded) == 16.66)
+        #expect(store.bountySlice(funded) * 6 <= funded.pool)
+        #expect(store.bountyPayout(for: place) == nil)
+        #expect(store.state.wallet.cash == cash)
+    }
+
+    @Test func expiredBountiesAreExcludedAndCanonicalRecordsWin() {
+        let store = AppStore(preview: true)
+        var bounty = store.bounty("b-greek")!
+        bounty.id = "paid-expired"
+        store.update { $0.myBounties = [bounty] }
+        bounty.expiresAt = Date().addingTimeInterval(-1).timeIntervalSince1970 * 1000
+        bounty.paidWith = "whop"
+        store.liveBounties = [bounty]
+        #expect(store.bounties.filter { $0.id == bounty.id }.count == 1)
+        #expect(!store.openBounties.contains { $0.id == bounty.id })
+    }
+
+    @Test func unknownAmenitiesAreNotInferredFromBusinessCategory() {
+        let store = AppStore(preview: true)
+        var place = store.place("doe")!
+        place.tags = nil
+        #expect(store.amenities(of: place).isEmpty)
+        place.tags = ["wheelchair": "yes", "toilets": "yes"]
+        #expect(Set(store.amenities(of: place)) == ["accessible", "bathroom"])
+    }
+}
+
+@MainActor
+struct RemoteBountyIdentityTests {
+    @Test func sameVenueAcrossMapProvidersFindsItsFundedBounty() {
+        let store = AppStore(preview: true)
+        var place = store.place("strada")!
+        var bounty = SeedExtras.shared.bounties[0]
+        bounty.id = "remote-venue"
+        bounty.target = BountyTarget(kind: "place", placeId: "apple-id-on-another-phone", name: place.name, place: place)
+        bounty.center = place.coords
+        bounty.recorded = 0
+        bounty.paidWith = "whop"
+        bounty.maxExplorers = 5
+        store.liveBounties = [bounty]
+        place.id = "osm-id-on-this-phone"
+        #expect(store.bounty(for: place)?.id == bounty.id)
+        place.coords = Coord(0, 0)
+        #expect(store.bounty(for: place) == nil)
+    }
+}

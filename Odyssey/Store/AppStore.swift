@@ -17,6 +17,7 @@ final class AppStore {
     let seed = Seed.shared
 
     /// OpenStreetMap places seen this session, so a place page can open them by id.
+    var worldMap = WorldMapState()
     var osmPlaces: [String: Place] = [:]
     /// Demo amenity tags by place id (wifi, seating, bathroom...), from Convex.
     var placeFeatures: [String: [String]] = [:]
@@ -26,6 +27,7 @@ final class AppStore {
     var deals: [String: [Deal]] = [:]
     /// Bounties every explorer has paid for and pushed live, from Convex.
     var liveBounties: [Bounty] = []
+    var bountyRevision = 0
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?
@@ -105,13 +107,15 @@ final class AppStore {
         AppStore.saveQueue.async { SharedStore.write(snapshot, to: name) }
     }
 
-    /// Back to the seeded fixture, like the mockup's reset. Your name, handle and
-    /// profile photo stay, and so do your widget and location settings.
+    /// Back to the seeded fixture and signed out, so the next sign in starts with
+    /// onboarding again. Your name, handle and profile photo stay, and so do your
+    /// widget and location settings. Callers also sign out of Convex, which saves
+    /// this cleared state there so signing back in does not bring the old one back.
     func reset() {
         let keep = state
         state = seed.initialState
-        state.session.signedIn = true
-        state.session.onboarded = true
+        state.session.signedIn = false
+        state.session.onboarded = false
         state.session.email = keep.session.email
         state.user.name = keep.user.name
         state.user.handle = keep.user.handle

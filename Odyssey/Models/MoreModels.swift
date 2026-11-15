@@ -10,10 +10,11 @@
 import Foundation
 
 nonisolated struct BountyTarget: Codable, Hashable, Sendable {
-    /// "place" or "area".
+    /// "place", "street", "city", or legacy "area".
     var kind: String
     var placeId: String?
     var name: String?
+    var place: Place?
 }
 
 /// A business paying explorers for walkthroughs of a place or an area.
@@ -37,6 +38,19 @@ nonisolated struct Bounty: Codable, Identifiable, Hashable, Sendable {
     var mine: Bool?
     /// Filled in by the store: what you earned from it so far.
     var earned: Double?
+    var durationDays: Int?
+    var maxExplorers: Int?
+    var platformFee: Double?
+    var totalAmount: Double?
+    var expiresAt: Double? // Unix milliseconds, set by the server at payment confirmation.
+    var paidWith: String?
+    var active: Bool?
+
+    var isFunded: Bool { paidWith == "whop" || maxExplorers != nil }
+    var isExpired: Bool { expiresAt.map { $0 <= Date().timeIntervalSince1970 * 1000 } ?? false }
+    var daysRemaining: Int {
+        expiresAt.map { max(0, Int(ceil(($0 / 1000 - Date().timeIntervalSince1970) / 86400))) } ?? days
+    }
 }
 
 nonisolated struct BountyArea: Codable, Identifiable, Hashable, Sendable {

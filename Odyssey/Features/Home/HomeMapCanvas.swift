@@ -16,7 +16,7 @@ import SwiftUI
 
 /// A pin with everything worked out ahead, so drawing it never touches the store.
 nonisolated struct HomePin: Identifiable, Equatable, Sendable {
-    enum Kind: Sendable { case mine, new, explored, star }
+    enum Kind: Sendable { case mine, new, explored, star, destination }
     var id: String
     var placeID: String
     var name: String
@@ -53,13 +53,15 @@ struct HomeMapCanvas: View, Equatable {
     var onPin: (String) -> Void
     var onBounty: (Bounty) -> Void
     var onAmenity: (String) -> Void = { _ in }
+    var onMapItem: (MKMapItem) -> Void = { _ in }
+    @State private var selectedFeature: MapFeature?
 
     nonisolated static func == (a: HomeMapCanvas, b: HomeMapCanvas) -> Bool {
         MainActor.assumeIsolated { a.revision == b.revision && a.position == b.position }
     }
 
     var body: some View {
-        Map(position: $position) {
+        Map(position: $position, selection: $selectedFeature) {
             ForEach(scene.polygons) { p in
                 MapPolygon(coordinates: p.coords)
                     .foregroundStyle(p.fill)
@@ -88,28 +90,42 @@ struct HomeMapCanvas: View, Equatable {
             BountyMapContent(bounties: scene.bounties, onPick: onBounty)
             ForEach(scene.pins) { pin in
                 Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
-                    HomePinView(pin: pin)
-                        .opacity(scene.dimsPins ? 0.4 : 1)
-                        .onTapGesture { onPin(pin.placeID) }
+                    Button { onPin(pin.placeID) } label: {
+                        HomePinView(pin: pin).frame(minWidth: 44, minHeight: 44)
+                            .opacity(scene.dimsPins ? 0.4 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(pin.name)
                 }
                 .annotationTitles(.hidden)
             }
             ForEach(scene.amenities) { pin in
                 Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
-                    HomeAmenityPinView(pin: pin)
-                        .onTapGesture { onAmenity(pin.id) }
+                    Button { onAmenity(pin.id) } label: {
+                        HomeAmenityPinView(pin: pin).frame(minWidth: 44, minHeight: 44)
+                    }.buttonStyle(.plain).accessibilityLabel(pin.name)
                 }
                 .annotationTitles(.hidden)
             }
             if scene.showsUser {
                 UserAnnotation()
                     .annotationTitles(.hidden)
-            } else {
-                Annotation("You", coordinate: scene.me.location, anchor: .center) { HomeMeDot() }
-                    .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .all))
+        .task(id: selectedFeature) {
+            guard let feature = selectedFeature else { return }
+            let item: MKMapItem
+            if let resolved = try? await MKMapItemRequest(feature: feature).mapItem {
+                item = resolved
+            } else {
+                item = MKMapItem(placemark: MKPlacemark(coordinate: feature.coordinate))
+                item.name = feature.title ?? "Selected location"
+            }
+            guard !Task.isCancelled else { return }
+            selectedFeature = nil
+            onMapItem(item)
+        }
         .onMapCameraChange(frequency: .onEnd) { context in onCamera(context.region) }
     }
 }

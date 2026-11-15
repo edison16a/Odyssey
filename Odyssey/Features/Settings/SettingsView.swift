@@ -73,7 +73,7 @@ struct SettingsView: View {
             Button("Reset", role: .destructive, action: reset)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your coins, streak, check-ins and cosmetics go back to the starting demo.")
+            Text("Your coins, streak, check-ins and cosmetics go back to the starting demo, and you are signed out.")
         }
     }
 
@@ -159,8 +159,11 @@ struct SettingsView: View {
     }
 
     private func reset() {
-        store.reset()
         router.popToRoot()
+        router.tab = .home
+        store.reset()
+        // Signing out pushes the cleared state first, so it is what comes back on the next sign in.
+        Task { await Cloud.shared.signOut() }
         toast.show("Fresh start", icon: "refresh")
     }
 

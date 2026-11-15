@@ -29,6 +29,10 @@ nonisolated struct ScanFeature: Identifiable, Hashable, Sendable {
     var id: String { "\(kind)|\(label)|\(frame)" }
     var isBarrier: Bool { wheelchair == "barrier" }
     var helps: Bool { wheelchair == "helps" }
+    /// Part of how the building lets people in and around, as opposed to an amenity inside it.
+    var isAccess: Bool {
+        isBarrier || helps || ["stairs", "step", "escalator", "ramp", "elevator", "automatic_door", "narrow_passage", "accessible_restroom"].contains(kind)
+    }
 
     var icon: String {
         switch kind {

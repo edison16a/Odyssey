@@ -88,7 +88,7 @@ struct HomePinView: View {
         case .new: return Palette.rare
         case .mine: return Palette.ink
         case .star: return Palette.gold
-        case .explored: return Palette.accent
+        case .explored, .destination: return Palette.accent
         }
     }
 }

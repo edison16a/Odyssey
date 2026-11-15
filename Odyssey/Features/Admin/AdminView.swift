@@ -39,13 +39,15 @@ struct AdminView: View {
         .background(Palette.surface)
         .confirmationDialog("Reset app data?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset", role: .destructive) {
-                store.reset()
                 router.popToRoot()
+                router.tab = .home
+                store.reset()
+                Task { await Cloud.shared.signOut() }
                 toast.show("Fresh start. Your name and photo stayed.", icon: "refresh")
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Coins, streak, check-ins and cosmetics go back to the start. Your name, handle and profile photo stay.")
+            Text("Coins, streak, check-ins and cosmetics go back to the start and you are signed out. Your name, handle and profile photo stay.")
         }
     }
 

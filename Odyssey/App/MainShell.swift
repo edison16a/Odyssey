@@ -65,7 +65,7 @@ struct MainShell: View {
     @ViewBuilder private func root(for tab: AppTab) -> some View {
         switch tab {
         case .home: HomeTab()
-        case .friends: FriendsTab()
+        case .worldMap: WorldMapView()
         case .explore: ExploreTab()
         case .profile: ProfileTab()
         }
@@ -79,7 +79,7 @@ struct TabBar: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             tab(.home)
-            tab(.friends)
+            tab(.worldMap)
             Button {
                 Haptics.tap()
                 router.present(.checkIn(placeID: nil))
