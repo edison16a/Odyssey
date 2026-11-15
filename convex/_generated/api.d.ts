@@ -17,6 +17,7 @@ import type * as lib from "../lib.js";
 import type * as memory from "../memory.js";
 import type * as places from "../places.js";
 import type * as recommend from "../recommend.js";
+import type * as scans from "../scans.js";
 import type * as seed from "../seed.js";
 import type * as social from "../social.js";
 import type * as taste from "../taste.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   memory: typeof memory;
   places: typeof places;
   recommend: typeof recommend;
+  scans: typeof scans;
   seed: typeof seed;
   social: typeof social;
   taste: typeof taste;

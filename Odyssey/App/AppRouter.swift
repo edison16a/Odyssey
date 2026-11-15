@@ -72,6 +72,10 @@ enum Cover: Identifiable, Hashable {
     case globe
     case exploredMap(focus: String?)
     case countryScene
+    /// Record a walkthrough video to turn a place into a 3D space. Nil picks the nearest place by GPS.
+    case scan(placeID: String?)
+    /// Walk around inside a finished 3D scan.
+    case scanViewer(scanID: String)
 
     var id: String {
         switch self {
@@ -84,6 +88,8 @@ enum Cover: Identifiable, Hashable {
         case .globe: return "globe"
         case .exploredMap(let focus): return "explored-\(focus ?? "")"
         case .countryScene: return "country"
+        case .scan(let id): return "scan-\(id ?? "")"
+        case .scanViewer(let id): return "scan-view-\(id)"
         }
     }
 }

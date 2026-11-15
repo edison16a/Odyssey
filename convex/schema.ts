@@ -254,4 +254,27 @@ export default defineSchema({
     day: v.string(),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // ── 3D scans ─────────────────────────────────────────────────────────
+  // A walkthrough video and the 3D space a render worker builds from it.
+  scans: defineTable({
+    userId: v.optional(v.id("users")),
+    placeId: v.string(),
+    placeName: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    videoId: v.id("_storage"),
+    seconds: v.number(),
+    status: v.string(), // "queued", "processing", "ready" or "failed"
+    message: v.string(), // what is happening right now, shown on the phone
+    progress: v.number(), // 0 to 1
+    worker: v.optional(v.string()),
+    modelId: v.optional(v.id("_storage")), // the splat file the phone renders
+    meta: v.optional(v.string()), // JSON: up direction and the recorded path
+    splats: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_place", ["placeId"])
+    .index("by_status", ["status"]),
 });

@@ -126,6 +126,7 @@ private struct PlaceMainCard: View {
             if let rating = place.rating { ratingRow(rating) }
             Text(facts(metres)).mutedStyle(13)
             actions.padding(.vertical, 16)
+            ScanPlaceRow(place: place).padding(.bottom, 16)
             whyRow(metres)
             if let blurb = place.blurb, !blurb.isEmpty {
                 Text(blurb)
