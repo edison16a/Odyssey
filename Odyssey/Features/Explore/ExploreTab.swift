@@ -26,6 +26,8 @@ struct ExploreTab: View {
     @State private var feeding = false
     /// Bumped on every fresh save so the gem gives a small pop.
     @State private var gemPops = 0
+    /// Bumped each time you land on another place, for the first-time hints.
+    @State private var moves = 0
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -50,12 +52,12 @@ struct ExploreTab: View {
         }
         .background(Palette.ink.ignoresSafeArea())
         .overlay {
-            if !store.state.tipsSeen.contains(Self.tipKey) {
-                ExploreCoachMarks {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        store.update { $0.tipsSeen.append(Self.tipKey) }
-                    }
+            // The hints wait for real places, since they are tried on them.
+            if !store.state.tipsSeen.contains(Self.tipKey), !visible.isEmpty, router.path(.explore).isEmpty {
+                ExploreCoachMarks(moves: moves, saves: gemPops) {
+                    store.update { $0.tipsSeen.append(Self.tipKey) }
                 }
+                .padding(.bottom, Self.tabBarHeight)
                 .transition(.opacity)
             }
         }
@@ -65,7 +67,10 @@ struct ExploreTab: View {
             syncCategory()
         }
         .onChange(of: store.state.discoverCategory) { syncCategory() }
-        .onChange(of: currentID) { keepFed() }
+        .onChange(of: currentID) { old, new in
+            if old != nil, new != nil { moves += 1 }
+            keepFed()
+        }
         .onChange(of: feed.cards.count) {
             if currentID == nil || !visible.contains(where: { $0.id == currentID }) { currentID = visible.first?.id }
             keepFed()

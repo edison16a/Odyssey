@@ -148,6 +148,7 @@ struct AddFriendsView: View {
             } else {
                 Button(contact.onOdyssey ? "Add" : "Invite") {
                     invited.insert(contact.name)
+                    store.completeFirstStep(.friend)
                     Haptics.tap()
                     toast.show("Request sent to \(contact.name)", icon: "send")
                 }

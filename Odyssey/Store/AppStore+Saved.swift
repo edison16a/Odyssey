@@ -18,6 +18,7 @@ extension AppStore {
         let on = !isStarred(place)
         update { s in s.starred[place.id] = on ? place : nil }
         Cloud.shared.recordStar(place, on: on)
+        if on { completeFirstStep(.save) }
         return on
     }
 

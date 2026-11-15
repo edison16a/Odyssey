@@ -629,7 +629,7 @@ struct OnboardingRevealStep: View {
                                 chip(trait, gem.colors[i % gem.colors.count])
                             }
                         }
-                        Text("Your gem is your explorer personality. It shifts as you save places and check in, and it decides what Odyssey shows you first.")
+                        Text("Your gem is your taste. It decides what Odyssey shows you first.")
                             .font(.system(size: 14))
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)

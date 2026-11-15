@@ -5,7 +5,8 @@
 //  The location and closing onboarding steps. First an honest card about location:
 //  what Odyssey uses it for and what it never does, with the system prompt
 //  behind one button. Then the opening moment from the mockup: a short
-//  checklist runs while the mark grows, and the app takes over.
+//  checklist runs while the mark grows, the app takes over, and the guide
+//  starts its tour.
 //
 
 import Foundation
@@ -26,14 +27,14 @@ struct OnboardingLocationStep: View {
                 .frame(width: 56, height: 56)
                 .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .padding(.bottom, 6)
-            Text("Find places near you").font(.system(size: 28, weight: .bold)).tracking(-0.8)
-            Text("Odyssey uses your location while the app is open to show what is around you, measure how far places are and confirm a check-in happened where you say it did.")
+            Text("Adventures near you").font(.system(size: 28, weight: .bold)).tracking(-0.8)
+            Text("Odyssey needs to know where you are to find them.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.72))
             VStack(alignment: .leading, spacing: 10) {
-                point("map", "Distances and places around you")
-                point("camera", "Check-ins that count where you are")
-                point("lock.fill", "Never shared with friends unless you post")
+                point("map", "Shows places around you")
+                point("camera", "Proves your check-ins")
+                point("lock.fill", "Private unless you post")
             }
             .padding(16)
             .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
@@ -76,7 +77,7 @@ struct OnboardingOpeningStep: View {
     @State private var bounce = false
     @State private var leaving = false
 
-    private let lines = ["Saving your taste gem", "Pinning your first adventure", "Setting up today's quests"]
+    private let lines = ["Saving your taste gem", "Pinning your first adventure", "Lining up your first steps"]
 
     var body: some View {
         VStack(spacing: 18) {
@@ -121,6 +122,8 @@ struct OnboardingOpeningStep: View {
         try? await Task.sleep(for: .milliseconds(250))
         withAnimation(.easeOut(duration: 0.3)) { leaving = true }
         try? await Task.sleep(for: .milliseconds(280))
+        // The guide takes over inside the app: a short tour, then the first steps on Home.
+        store.beginGuide()
         store.update { s in s.session.onboarded = true }
     }
 }

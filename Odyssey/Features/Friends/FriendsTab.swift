@@ -60,6 +60,7 @@ struct FriendsTab: View {
         HStack(spacing: Space.s2) {
             Text("Friends").titleStyle(30).frame(maxWidth: .infinity, alignment: .leading)
             IconButton(icon: "plus", label: "Add friends") { router.push(.addFriends) }
+                .guideSpot(.addFriend)
         }
         .padding(.horizontal, Space.s5)
         .padding(.top, 6)

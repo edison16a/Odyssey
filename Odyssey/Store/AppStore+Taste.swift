@@ -96,6 +96,7 @@ extension AppStore {
         }
         cloudPicks[place.id] = nil
         Cloud.shared.recordVote(place, value: next)
+        if next == 1 { completeFirstStep(.save) }
         return next
     }
 

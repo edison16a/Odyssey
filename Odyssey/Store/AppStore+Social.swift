@@ -33,6 +33,7 @@ extension AppStore {
             s.stats.friends += 1
         }
         Cloud.shared.recordFriend(id, status: "friends")
+        completeFirstStep(.friend)
     }
 
     func declineRequest(_ id: String) {

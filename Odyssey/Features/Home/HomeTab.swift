@@ -18,6 +18,7 @@ struct HomeTab: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
     @Environment(ToastCenter.self) private var toast
+    @Environment(Guide.self) private var guide
     @State private var preview: Place?
     @State private var bountyOpen: Bounty?
     @State private var paid: [String] = []
@@ -30,7 +31,14 @@ struct HomeTab: View {
                         .id("top")
                         .padding(.horizontal, 20)
                         .padding(.top, 6)
+                    if store.firstStepsShown {
+                        FirstStepsCard()
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                     HomeAdventureHero()
+                        .id("hero")
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
                     HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
@@ -47,6 +55,13 @@ struct HomeTab: View {
             }
             .onChange(of: router.scrollToTop[.home] ?? 0) { _, _ in
                 withAnimation { reader.scrollTo("top", anchor: .top) }
+            }
+            // A spotlight is about to land on Home: bring what it lights up into view.
+            .onChange(of: guide.step) { _, step in
+                guard let step, step.tab == .home else { return }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    if step.spot == .start { reader.scrollTo("hero", anchor: .center) } else { reader.scrollTo("top", anchor: .top) }
+                }
             }
         }
         .background(Palette.surface)
@@ -149,6 +164,7 @@ struct HomeRewardsHeader: View {
                 }
                 .buttonStyle(PressStyle())
             }
+            .guideSpot(.stats)
             .animation(.spring(response: 0.5, dampingFraction: 0.8), value: store.state.wallet.coins)
         }
     }
@@ -240,10 +256,12 @@ struct HomeAdventureHero: View {
                     .shadow(color: Palette.accent.opacity(done ? 0 : (glow ? 0.45 : 0.15)), radius: glow ? 14 : 6, y: 4)
                 }
                 .buttonStyle(PressStyle(scale: 0.97))
+                .guideSpot(.start)
             }
             .padding(14)
             .background(.white)
         }
+        .guideSpot(.hero)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)

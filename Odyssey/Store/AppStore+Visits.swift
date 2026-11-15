@@ -119,6 +119,7 @@ extension AppStore {
                                    before: before, after: after, rankBefore: rankBefore, rankAfter: rank(), post: post,
                                    recommended: picked, board: board)
         Cloud.shared.recordCheckIn(place, caption: caption, photoFile: photoFile, selfieFile: selfieFile, result: result)
+        completeFirstStep(.checkIn)
         return result
     }
 
