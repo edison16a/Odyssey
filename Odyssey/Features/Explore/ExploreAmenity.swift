@@ -42,7 +42,7 @@ enum ExploreAmenity: String, CaseIterable, Identifiable, Hashable {
     /// The amenities a place has, in the standard order.
     @MainActor
     static func of(_ place: Place, store: AppStore) -> [ExploreAmenity] {
-        let tags = store.placeFeatures[place.id] ?? []
+        let tags = store.amenities(of: place)
         return allCases.filter { tags.contains($0.rawValue) }
     }
 
@@ -50,7 +50,7 @@ enum ExploreAmenity: String, CaseIterable, Identifiable, Hashable {
     @MainActor
     static func place(_ place: Place, has wanted: Set<ExploreAmenity>, store: AppStore) -> Bool {
         guard !wanted.isEmpty else { return true }
-        let tags = Set(store.placeFeatures[place.id] ?? [])
+        let tags = Set(store.amenities(of: place))
         return wanted.allSatisfy { tags.contains($0.rawValue) }
     }
 }
