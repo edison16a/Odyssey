@@ -187,9 +187,24 @@ def build(video, work, say):
     def solve(out_dir):
         """Place the frames. Forgiving settings, so a blurry stretch does not cut the walk in two."""
         os.makedirs(out_dir)
-        run([colmap, "mapper", "--database_path", db, "--image_path", images, "--output_path", out_dir,
-             "--Mapper.ba_refine_principal_point", "0", "--Mapper.abs_pose_min_num_inliers", "12",
-             "--Mapper.abs_pose_min_inlier_ratio", "0.12", "--Mapper.max_reg_trials", "6"], log)
+        solve_log = out_dir + ".log"
+        proc = subprocess.Popen([colmap, "mapper", "--database_path", db, "--image_path", images, "--output_path", out_dir,
+                                 "--Mapper.ba_refine_principal_point", "0", "--Mapper.abs_pose_min_num_inliers", "12",
+                                 "--Mapper.abs_pose_min_inlier_ratio", "0.12", "--Mapper.max_reg_trials", "6"],
+                                stdout=open(solve_log, "wb"), stderr=subprocess.STDOUT)
+        # This is the longest quiet step, so count the frames as they are placed and say so.
+        told = 0
+        try:
+            while proc.poll() is None:
+                time.sleep(4)
+                placed_now = min(frames, open(solve_log, errors="ignore").read().count("Registering image"))
+                if placed_now - told >= 10:
+                    told = placed_now
+                    say(f"Working out where the camera was, {placed_now} of {frames} frames",
+                        say.progress if say.progress > 0.39 else 0.34 + 0.05 * placed_now / frames)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
         return sorted(((registered(os.path.join(out_dir, d)), d) for d in os.listdir(out_dir)), reverse=True)
 
     say("Working out where the camera was", 0.34)
