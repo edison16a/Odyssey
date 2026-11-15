@@ -183,7 +183,7 @@ struct HomeAdventureHero: View {
     var body: some View {
         let pick = store.dailyPick()
         let done = store.checkedInTodayIDs.contains(pick.place.id)
-        let reward = Rewards.checkIn.coins + (pick.rare ? Rewards.first.coins : 0) + 150
+        let rewards = store.checkInRewards(for: pick.place)
         VStack(spacing: 0) {
             Button { router.push(.place(pick.place.id)) } label: {
                 ZStack(alignment: .bottomLeading) {
@@ -218,9 +218,9 @@ struct HomeAdventureHero: View {
                     } else {
                         Text("You'll earn").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted)
                         CoinIcon(size: 18)
-                        Text("+\(reward) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
+                        Text("+\(rewards.coins) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
                         Spacer()
-                        Text("+\(Rewards.checkIn.xp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
+                        Text("+\(rewards.totalXp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
                     }
                 }
                 .foregroundStyle(Palette.ink)

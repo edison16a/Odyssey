@@ -82,6 +82,7 @@ struct CheckInFlow: View {
                     WalkthroughRecorder(place: place) { seconds, video, simulated in
                         recorded(Clip(seconds: seconds, video: video, simulated: simulated))
                     }
+                    .overlay(alignment: .top) { CheckInRewardOverlay(place: place).padding(.top, 50) }
                 case .pick:
                     CheckInPickStep { chosen in choose(chosen) }
                 default:
@@ -136,10 +137,70 @@ struct CheckInFlow: View {
         let outcome = store.checkIn(place, caption: "Exploring \(place.name).", photoFile: nil, selfieFile: nil)
         result = outcome
         Task {
-            saved = await WalkthroughSaved.save(place, seconds: clip.seconds, video: clip.video, simulated: clip.simulated, store: store)
+            // Too far from the place: the video is still kept, but it pays nothing either.
+            saved = await WalkthroughSaved.save(place, seconds: clip.seconds, video: clip.video, simulated: clip.simulated,
+                                                store: store, rewarded: !outcome.tooFar)
             LiveActivityService.shared.complete(coins: outcome.coins + (saved?.result.coins ?? 0), streak: store.state.streak.days)
             Haptics.success()
             withAnimation(.easeInOut(duration: 0.35)) { stage = outcome.streak ? .power : .adventure }
         }
     }
+}
+
+/// What this check-in will pay, over the top of the camera: the place, the coins and XP
+/// from the same breakdown the wallet is credited from, and how long to film. Says so
+/// plainly when you are too far for the check-in to pay.
+struct CheckInRewardOverlay: View {
+    @Environment(AppStore.self) private var store
+    /// The place this check-in is for, or nil when it is picked after recording.
+    var place: Place?
+
+    var body: some View {
+        let target = place ?? store.nearestPlace
+        VStack(spacing: 3) {
+            if let target {
+                let rewards = store.checkInRewards(for: target)
+                Text(place == nil ? "Nearest: \(target.name)" : target.name)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    if !rewards.fresh {
+                        Text("Already explored today, no coins this time")
+                    } else if !rewards.inReach {
+                        Image(systemName: "location.fill").font(.system(size: 10, weight: .bold))
+                        Text("Get within \(radius) m to earn coins")
+                    } else {
+                        CoinIcon(size: 13)
+                        Text("+\(rewards.coins) coins").fontWeight(.heavy).monospacedDigit()
+                        if rewards.totalXp > 0 {
+                            Text("+\(rewards.totalXp) XP").fontWeight(.heavy).foregroundStyle(Color(hex: "#c9b6ff"))
+                        }
+                    }
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(rewards.earnable || !rewards.fresh ? .white : Palette.gold)
+            } else {
+                HStack(spacing: 5) {
+                    CoinIcon(size: 13)
+                    Text("Earn up to \(upTo) coins").fontWeight(.heavy).monospacedDigit()
+                }
+                .font(.system(size: 12, weight: .semibold))
+            }
+            Text("Film up to \(Rewards.maxClipSeconds) seconds")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+        }
+        .foregroundStyle(.white)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .padding(.horizontal, 24)
+        .allowsHitTesting(false)
+    }
+
+    private var radius: Int { Int(Rewards.checkInRadius) }
+
+    /// Best case with no place yet: a first explorer, recommended check-in on its own.
+    private var upTo: Int { Rewards.checkIn.coins + Rewards.first.coins + Rewards.recommended.coins }
 }
