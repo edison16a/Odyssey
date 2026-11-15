@@ -301,7 +301,14 @@ final class Cloud {
                 lastAt: Date(timeIntervalSince1970: ((r["lastAt"] as? NSNumber)?.doubleValue ?? 0) / 1000)
             )
         }
-        return PlaceContributors(total: (d["total"] as? NSNumber)?.intValue ?? 0, people: people)
+        let first = (d["first"] as? [String: Any]).map { f in
+            PlaceContributors.First(
+                name: f["name"] as? String ?? "Explorer",
+                personID: f["demoId"] as? String,
+                at: Date(timeIntervalSince1970: ((f["at"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        }
+        return PlaceContributors(total: (d["total"] as? NSNumber)?.intValue ?? 0, people: people, first: first)
     }
 
     /// Amenities and deals are public demo data, loaded signed in or not.
@@ -530,8 +537,15 @@ struct PlaceContributors: Equatable {
         var summary: String?
         var lastAt: Date
     }
+    /// Whoever explored the place before anyone else.
+    struct First: Equatable {
+        var name: String
+        var personID: String?
+        var at: Date
+    }
     var total: Int
     var people: [Person]
+    var first: First?
 }
 
 /// A public bathroom, elevator, water fountain or free wifi spot on the map.

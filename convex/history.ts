@@ -211,6 +211,16 @@ export const contributors = query({
       out.push({ name: p?.name ?? "Explorer", demoId: p?.demoId ?? null, ...stats });
     }
     out.sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
-    return { total: rows.length, people: out };
+    // The first explorer: the place's claim if set, else the earliest walkthrough.
+    const place = await ctx.db.query("places").withIndex("by_placeId", (q) => q.eq("placeId", placeId)).unique();
+    const earliest = rows.reduce<(typeof rows)[number] | null>((a, r) => (!a || r.createdAt < a.createdAt ? r : a), null);
+    const firstUser = place?.firstExplorerId ?? earliest?.userId;
+    const firstAt = place?.firstExplorerId ? place.firstExploredAt ?? earliest?.createdAt ?? 0 : earliest?.createdAt ?? 0;
+    let first = null;
+    if (firstUser) {
+      const p = await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", firstUser)).unique();
+      first = { name: p?.name ?? "Explorer", demoId: p?.demoId ?? null, at: firstAt };
+    }
+    return { total: rows.length, people: out, first };
   },
 });
