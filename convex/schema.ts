@@ -248,6 +248,19 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_friend", ["userId", "friendKey"]),
 
+  /**
+   * Find-friends keys: SHA-256 of an explorer's normalized phone (last 10
+   * digits) or email (lowercased). Phones hash contacts the same way, so
+   * matching never sees a raw number or address. See contacts.ts.
+   */
+  contactKeys: defineTable({
+    userId: v.id("users"),
+    hash: v.string(),
+    kind: v.string(), // "phone" | "email"
+  })
+    .index("by_hash", ["hash"])
+    .index("by_user", ["userId"]),
+
   savedPlaces: defineTable({
     userId: v.id("users"),
     placeId: v.string(),

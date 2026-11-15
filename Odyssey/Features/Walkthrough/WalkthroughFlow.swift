@@ -78,13 +78,13 @@ struct WalkthroughSaved {
 
     /// Read the frames, wait at least a moment so it never flashes past, then save the
     /// contribution locally and to the cloud, and delete the local file.
-    static func save(_ place: Place, seconds: Int, video: URL?, simulated: Bool, store: AppStore) async -> WalkthroughSaved {
+    static func save(_ place: Place, seconds: Int, video: URL?, simulated: Bool, store: AppStore, rewarded: Bool = true) async -> WalkthroughSaved {
         let start = Date()
         let photos = simulated ? WalkthroughRecorder.shots(for: place) : []
         let found = await WalkthroughAnalyzer.analyze(place: place, video: video, photos: photos, store: store)
         let left = 1.6 - Date().timeIntervalSince(start)
         if left > 0 { try? await Task.sleep(for: .seconds(left)) }
-        let result = store.addVideo(place, seconds: seconds, insights: found.insights)
+        let result = store.addVideo(place, seconds: seconds, insights: found.insights, rewarded: rewarded)
         Cloud.shared.recordWalkthrough(place, seconds: seconds, video: simulated ? nil : video,
                                        insights: found.insights, points: result.points)
         let payout = result.already ? nil : store.bountyPayout(for: place)

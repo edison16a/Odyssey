@@ -2,12 +2,14 @@
 //  AddFriendsView.swift
 //  Odyssey
 //
-//  Find friends. Answer requests, search public explorers by handle or
-//  name, add people from contacts (matching is pretend, no address book is
-//  read) and pick from explorers near you. Ported from add-friends.js.
+//  Find friends. Answer requests, connect your contacts to see who is
+//  already on Odyssey (numbers and emails are hashed on the phone before
+//  matching, see ContactsService) and invite everyone else, search public
+//  explorers by handle or name and pick from explorers near you.
 //
 
 import Foundation
+import MessageUI
 import SwiftUI
 
 struct AddFriendsView: View {
@@ -15,15 +17,18 @@ struct AddFriendsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ToastCenter.self) private var toast
     @Environment(RewardPopCenter.self) private var pop
+    @Environment(\.scenePhase) private var scenePhase
 
+    @State private var contacts = ContactsService.shared
     @State private var query = ""
     @State private var invited: Set<String> = []
+    @State private var inviting: InviteRequest?
 
     var body: some View {
         VStack(spacing: 0) {
             NavHeader(title: "Add friends", back: { router.pop() })
             FieldBox(icon: "search") {
-                TextField("Search by name or @handle", text: $query)
+                TextField("Search names, @handles or contacts", text: $query)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
@@ -31,35 +36,68 @@ struct AddFriendsView: View {
             .padding(.bottom, 4)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                        suggestions
-                    } else {
+                    if searching {
                         results
+                    } else {
+                        suggestions
                     }
                 }
                 .padding(.bottom, 40)
             }
+            .scrollDismissesKeyboard(.immediately)
         }
         .background(Palette.surface)
+        .task {
+            contacts.refreshAccess()
+            if contacts.access == .authorized && !contacts.loaded { await contacts.load() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            let before = contacts.access
+            contacts.refreshAccess()
+            if contacts.access == .authorized && before != .authorized { Task { await contacts.load() } }
+        }
+        .sheet(item: $inviting) { request in
+            InviteSheet(request: request) { sent in
+                inviting = nil
+                guard sent else { return }
+                invited.insert(request.contact.id)
+                Haptics.tap()
+                toast.show("Invite sent to \(request.contact.firstName)", icon: "send")
+            }
+        }
     }
+
+    private var trimmed: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
+    private var searching: Bool { !trimmed.isEmpty }
 
     // MARK: Search
 
     @ViewBuilder private var results: some View {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = trimmed
         // The field invites "@handle", but handles are stored without the @.
         let handle = q.hasPrefix("@") ? String(q.dropFirst()) : q
         let hits = store.seed.people.filter {
             $0.name.lowercased().contains(q) || (!handle.isEmpty && $0.handle.lowercased().contains(handle))
         }
-        if hits.isEmpty {
-            Text("No public Explorer matches that.")
+        let onOdyssey = visibleMatches
+        let toInvite = visibleInvites
+        if hits.isEmpty && onOdyssey.isEmpty && toInvite.isEmpty {
+            Text("No one matches that.")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.muted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Space.s8)
         } else {
-            rows(hits).padding(.horizontal, Space.s5)
+            if !onOdyssey.isEmpty {
+                section("On Odyssey", link: nil) { matchRows(onOdyssey) }
+            }
+            if !hits.isEmpty {
+                section("Explorers", link: nil) { rows(hits) }
+            }
+            if !toInvite.isEmpty {
+                section("Invite", link: nil) { inviteRows(toInvite) }
+            }
         }
     }
 
@@ -72,14 +110,16 @@ struct AddFriendsView: View {
                 ForEach(requests) { person in requestRow(person) }
             }
         }
-        section("From your contacts", link: "Matched privately") {
-            ForEach(store.seed.contacts, id: \.name) { contact in contactRow(contact) }
+        contactsBlock
+        let nearby = store.seed.people.filter { !store.isFriend($0.id) && !store.state.requests.contains($0.id) }
+        if !nearby.isEmpty {
+            section("Explorers near you", link: nil) { rows(nearby) }
         }
-        section("Explorers near you", link: nil) {
-            rows(store.seed.people.filter { !store.isFriend($0.id) && !store.state.requests.contains($0.id) })
+        if contacts.access == .authorized && !visibleInvites.isEmpty {
+            section("Invite", link: "\(visibleInvites.count) contacts") { inviteRows(visibleInvites) }
         }
         inviteRow.padding(.horizontal, Space.s5).padding(.top, Space.s5)
-        Text("Odyssey never stores your address book. Contacts are matched on a protected endpoint and then discarded.")
+        Text("Odyssey never stores your address book. Phone numbers and emails are scrambled on your phone before matching, then discarded.")
             .font(.system(size: 11))
             .foregroundStyle(Palette.faint)
             .multilineTextAlignment(.center)
@@ -87,6 +127,201 @@ struct AddFriendsView: View {
             .padding(.horizontal, Space.s5)
             .padding(.vertical, Space.s3)
     }
+
+    // MARK: Contacts
+
+    @ViewBuilder private var contactsBlock: some View {
+        switch contacts.access {
+        case .notDetermined:
+            permissionCard(
+                title: "Find your friends",
+                sub: "See who from your contacts is already exploring on Odyssey.",
+                button: "Connect contacts", kind: .primary
+            ) {
+                Task { await contacts.connect() }
+            }
+        case .denied:
+            permissionCard(
+                title: "Contacts are off",
+                sub: "Turn on Contacts for Odyssey in Settings to find friends you already know.",
+                button: "Open Settings", kind: .soft
+            ) {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+        case .authorized:
+            section("On Odyssey", link: contacts.matches.isEmpty ? nil : "\(visibleMatches.count) found") {
+                if contacts.loading && !contacts.loaded {
+                    HStack(spacing: Space.s3) {
+                        ProgressView()
+                        Text("Looking through your contacts").font(.system(size: 13)).foregroundStyle(Palette.muted)
+                    }
+                    .padding(.vertical, Space.s4)
+                } else if !visibleMatches.isEmpty {
+                    matchRows(visibleMatches)
+                } else {
+                    Text(emptyMatchesText)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Palette.muted)
+                        .padding(.vertical, Space.s3)
+                }
+            }
+        }
+    }
+
+    private var emptyMatchesText: String {
+        if contacts.contacts.isEmpty { return "No contacts with a phone number or email yet." }
+        if !Cloud.shared.signedIn { return "Sign in to see which of your contacts are on Odyssey." }
+        if !contacts.matchingRan { return "Could not check your contacts right now. Try again in a bit." }
+        return "None of your contacts are on Odyssey yet. Invite them below."
+    }
+
+    private func permissionCard(title: String, sub: String, button: String, kind: PillButtonStyle.Kind,
+                                action: @escaping () -> Void) -> some View {
+        VStack(spacing: Space.s3) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 52, height: 52)
+                .background(Palette.surface, in: Circle())
+            VStack(spacing: 4) {
+                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.ink)
+                Text(sub)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(button, action: action)
+                .buttonStyle(.pill(kind, height: 44, fill: true))
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .softCard(padding: Space.s5)
+        .padding(.horizontal, Space.s5)
+        .padding(.top, Space.s5)
+    }
+
+    /// Matched explorers, filtered by the search.
+    private var visibleMatches: [ContactMatch] {
+        let q = trimmed
+        guard !q.isEmpty else { return contacts.matches }
+        let handle = q.hasPrefix("@") ? String(q.dropFirst()) : q
+        return contacts.matches.filter { m in
+            m.name.lowercased().contains(q) || m.handle.lowercased().contains(handle)
+                || (contacts.contact(for: m)?.name.lowercased().contains(q) ?? false)
+        }
+    }
+
+    /// Contacts not on Odyssey, sorted by name, filtered by the search.
+    private var visibleInvites: [DeviceContact] {
+        guard contacts.access == .authorized else { return [] }
+        let q = trimmed
+        let digits = q.filter(\.isNumber)
+        return contacts.contacts.filter { c in
+            guard !contacts.matchedContactIDs.contains(c.id) else { return false }
+            guard !q.isEmpty else { return true }
+            return c.name.lowercased().contains(q)
+                || c.emails.contains { $0.contains(q) }
+                || (digits.count >= 3 && c.phones.contains { $0.contains(digits) })
+        }
+    }
+
+    private func matchRows(_ matches: [ContactMatch]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(matches, id: \.userId) { match in matchRow(match) }
+        }
+    }
+
+    private func matchRow(_ match: ContactMatch) -> some View {
+        let person = match.demoId.flatMap { store.person($0) }
+        let contact = contacts.contact(for: match)
+        let sub = contact.map { $0.name == match.name ? "@\(match.handle)" : "@\(match.handle), \($0.name) in contacts" } ?? "@\(match.handle)"
+        return HStack(spacing: Space.s3) {
+            Button {
+                if let person { router.push(.person(person.id)) }
+            } label: {
+                HStack(spacing: Space.s3) {
+                    matchAvatar(match, person: person, contact: contact)
+                    titles(match.name, sub)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(person == nil)
+            if store.isFriend(match.friendKey) {
+                Tag(text: "Added", icon: "check", tone: .success)
+            } else {
+                Button("Add") { add(match) }.buttonStyle(.pill(.primary, height: 36))
+            }
+        }
+        .padding(.vertical, Space.s3)
+    }
+
+    @ViewBuilder
+    private func matchAvatar(_ match: ContactMatch, person: Person?, contact: DeviceContact?) -> some View {
+        if let person {
+            AvatarView(person: person, size: 44)
+        } else if let url = match.avatarURL {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Palette.surface2
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(Circle())
+        } else if let contact {
+            ContactAvatar(contact: contact)
+        } else {
+            DefaultFace().frame(width: 44, height: 44).clipShape(Circle())
+        }
+    }
+
+    private func inviteRows(_ people: [DeviceContact]) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(people) { contact in contactRow(contact) }
+        }
+    }
+
+    private func contactRow(_ contact: DeviceContact) -> some View {
+        HStack(spacing: Space.s3) {
+            ContactAvatar(contact: contact)
+            titles(contact.name, contact.detail)
+            if invited.contains(contact.id) {
+                Tag(text: "Invited", icon: "check")
+            } else {
+                Button("Invite") { invite(contact) }
+                    .buttonStyle(.pill(.soft, height: 36))
+            }
+        }
+        .padding(.vertical, Space.s3)
+    }
+
+    private var inviteLink: URL {
+        URL(string: "https://pathy.app/invite/\(store.state.user.handle)") ?? URL(string: "https://pathy.app")!
+    }
+
+    private func invite(_ contact: DeviceContact) {
+        let text = "Come explore with me on Odyssey. Check in somewhere new and we both earn coins."
+        let canText = contact.phone != nil && MFMessageComposeViewController.canSendText()
+        inviting = InviteRequest(contact: contact, kind: canText ? .message : .share, text: text, link: inviteLink)
+    }
+
+    private func add(_ match: ContactMatch) {
+        if let person = match.demoId.flatMap({ store.person($0) }) {
+            add(person)
+            return
+        }
+        let bundled = match.avatarPath.map { $0.hasPrefix("assets/") } ?? false
+        let person = Person(id: match.userId, name: match.name, handle: match.handle,
+                            avatar: Avatar(kind: bundled ? "photo" : "none", value: bundled ? match.avatarPath : nil),
+                            frame: "none", rank: 0, xp: 0, explored: 0, contributions: 0, friend: true,
+                            city: match.city, bio: "", effect: nil, icon: nil, banner: nil)
+        store.addFriend(person)
+        Haptics.tap()
+        toast.show("You and \(match.name.split(separator: " ").first.map(String.init) ?? match.name) are friends", icon: "check")
+    }
+
+    // MARK: Explorers
 
     private func section<Content: View>(_ title: String, link: String?, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -139,28 +374,9 @@ struct AddFriendsView: View {
         .padding(.vertical, Space.s3)
     }
 
-    private func contactRow(_ contact: Contact) -> some View {
-        HStack(spacing: Space.s3) {
-            DefaultFace().frame(width: 44, height: 44)
-            titles(contact.name, contact.onOdyssey ? "On Odyssey" : "Not on Odyssey yet")
-            if invited.contains(contact.name) {
-                Tag(text: "Sent")
-            } else {
-                Button(contact.onOdyssey ? "Add" : "Invite") {
-                    invited.insert(contact.name)
-                    Haptics.tap()
-                    toast.show("Request sent to \(contact.name)", icon: "send")
-                }
-                .buttonStyle(.pill(contact.onOdyssey ? .primary : .soft, height: 36))
-            }
-        }
-        .padding(.vertical, Space.s3)
-    }
-
     private var inviteRow: some View {
-        let link = URL(string: "https://pathy.app/invite/\(store.state.user.handle)") ?? URL(string: "https://pathy.app")!
-        return ShareLink(item: link, subject: Text("Come explore with me"),
-                         message: Text("I'm on Odyssey. Check in somewhere new and we both earn coins.")) {
+        ShareLink(item: inviteLink, subject: Text("Come explore with me"),
+                  message: Text("I'm on Odyssey. Check in somewhere new and we both earn coins.")) {
             HStack(spacing: Space.s3) {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 17, weight: .semibold))

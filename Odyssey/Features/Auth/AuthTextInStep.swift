@@ -58,7 +58,7 @@ struct AuthTextInStep: View {
     }
 
     private var codeCard: some View {
-        Text(login.map { spaced($0.code) } ?? "— — —")
+        Text(login.map { spaced($0.code) } ?? "••• •••")
             .font(.system(size: 34, weight: .bold, design: .monospaced))
             .frame(maxWidth: .infinity)
             .frame(height: 76)
