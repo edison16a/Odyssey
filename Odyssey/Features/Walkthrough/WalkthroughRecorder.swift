@@ -2,10 +2,10 @@
 //  WalkthroughRecorder.swift
 //  Odyssey
 //
-//  Records the walkthrough with the real back camera, 5 to 60 seconds,
-//  with a timer ring around the record button and a tip that changes as
-//  you walk. Without a camera it plays a simulated walk through the place
-//  photo and indoor photos so the flow still works in the simulator.
+//  The video camera: the real back camera, one record button with a timer
+//  ring, up to 60 seconds. Used by the + button and by place screens.
+//  Without a camera it plays a simulated walk through the place photo and
+//  indoor photos so the flow still works in the simulator.
 //  Ported from features/walkthrough/walk-recorder.js.
 //
 
@@ -14,8 +14,8 @@ import SwiftUI
 
 struct WalkthroughRecorder: View {
     @Environment(AppStore.self) private var store
-    @Environment(ToastCenter.self) private var toast
-    var place: Place
+    /// Where you are, when known. Only used for the simulated walk.
+    var place: Place?
     var onDone: (_ seconds: Int, _ video: URL?, _ simulated: Bool) -> Void
 
     @State private var camera = CameraModel()
@@ -25,9 +25,9 @@ struct WalkthroughRecorder: View {
     /// Whether the real camera was recording when the walk began.
     @State private var recordingLive = false
 
-    private static let minimum = 5.0
+    /// Shorter taps are ignored, so a double tap does not end the video at once.
+    private static let minimum = 1.0
     private static let maximum = 60.0
-    private static let tips = ["Start at the entrance", "Pan slowly, like you are showing a friend", "Show where people sit", "Finish where you would hang out"]
 
     private var live: Bool { camera.isAvailable && !camera.permissionDenied && camera.isRunning }
 
@@ -48,16 +48,16 @@ struct WalkthroughRecorder: View {
         .onDisappear { camera.stop() }
     }
 
-    private var shots: [String] { WalkthroughRecorder.shots(for: place) }
+    private var shots: [String] { WalkthroughRecorder.shots(for: place ?? store.nearestPlace) }
 
     /// The simulated walk: the place photo, then three indoor photos that fit the kind of place.
-    static func shots(for place: Place) -> [String] {
+    static func shots(for place: Place?) -> [String] {
         let indoor: [String: [String]] = [
             "library": ["reading-room", "stairs", "corridor"], "campus": ["lobby", "hallway-1", "meeting-room"],
             "office": ["lobby", "meeting-room", "kitchen"], "museum": ["event-hall", "corridor", "stairs"],
         ]
-        let names = indoor[place.category ?? ""] ?? ["entrance-door", "lobby", "hallway-1"]
-        return [place.photo] + names.map { "assets/media/indoor/\($0).jpg" }
+        let names = indoor[place?.category ?? ""] ?? ["entrance-door", "lobby", "hallway-1"]
+        return (place.map { [$0.photo] } ?? []) + names.map { "assets/media/indoor/\($0).jpg" }
     }
 
     private func view(seconds: Double) -> some View {
@@ -99,14 +99,6 @@ struct WalkthroughRecorder: View {
                 }
                 .padding(12)
                 Spacer()
-                Text(WalkthroughRecorder.tips[min(WalkthroughRecorder.tips.count - 1, Int(seconds / 6))])
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                    .padding(12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -115,8 +107,7 @@ struct WalkthroughRecorder: View {
 
     private func bar(seconds: Double) -> some View {
         HStack {
-            Text(recording ? "Recording" : "Tap to start")
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
             Button {
                 recording ? finish() : begin()
             } label: {
@@ -137,11 +128,8 @@ struct WalkthroughRecorder: View {
             .buttonStyle(PressStyle(scale: 0.94))
             .disabled(finishing)
             .accessibilityLabel(recording ? "Stop recording" : "Record")
-            Text(recording ? (seconds < WalkthroughRecorder.minimum ? "Keep going" : "Tap to finish") : "\(Int(WalkthroughRecorder.maximum))s max")
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            Spacer()
         }
-        .font(.system(size: 11, weight: .bold))
-        .foregroundStyle(Palette.muted)
     }
 
     private func begin() {
@@ -155,10 +143,7 @@ struct WalkthroughRecorder: View {
     private func finish() {
         guard recording, !finishing else { return }
         let seconds = Date().timeIntervalSince(startedAt)
-        if seconds < WalkthroughRecorder.minimum {
-            toast.show("A few more seconds. Aim for at least \(Int(WalkthroughRecorder.minimum)).", icon: "clock")
-            return
-        }
+        if seconds < WalkthroughRecorder.minimum { return }
         finishing = true
         // Decided by how the walk began: the camera can come up after Record was tapped.
         let simulated = !recordingLive
@@ -168,7 +153,7 @@ struct WalkthroughRecorder: View {
             recording = false
             camera.stop()
             Haptics.success()
-            onDone(Int(seconds.rounded()), url, simulated)
+            onDone(max(1, Int(seconds.rounded())), url, simulated)
         }
     }
 }

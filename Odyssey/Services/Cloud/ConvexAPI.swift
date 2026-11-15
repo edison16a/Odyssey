@@ -173,10 +173,21 @@ final class ConvexAPI {
 
     /// Step two: trade the code for a session.
     func verify(email: String, code: String) async throws {
-        let value = try await call(.action, "auth:signIn", ["provider": "email-otp", "params": ["email": email, "code": code]])
+        try await signIn(provider: "email-otp", params: ["email": email, "code": code],
+                         failure: "That code did not work. Check it and try again.")
+    }
+
+    /// Text-in sign-in: the server already knows the number that texted the code.
+    func verifyTextIn(nonce: String) async throws {
+        try await signIn(provider: "phone-text", params: ["nonce": nonce],
+                         failure: "That sign-in expired. Get a new code and try again.")
+    }
+
+    private func signIn(provider: String, params: [String: Any], failure: String) async throws {
+        let value = try await call(.action, "auth:signIn", ["provider": provider, "params": params])
         guard let dict = value as? [String: Any], let t = dict["tokens"] as? [String: Any],
               let token = t["token"] as? String, let refreshToken = t["refreshToken"] as? String else {
-            throw ConvexError.server("That code did not work. Check it and try again.")
+            throw ConvexError.server(failure)
         }
         setTokens(AuthTokens(token: token, refreshToken: refreshToken))
     }

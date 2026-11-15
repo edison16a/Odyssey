@@ -17,7 +17,7 @@ struct PlaceFriendsCard: View {
     var place: Place
 
     var body: some View {
-        let friends = store.friendsWhoVisited(place)
+        let friends = explorers
         let mine = store.status(of: place).status == .mine
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -38,6 +38,7 @@ struct PlaceFriendsCard: View {
                     Button { router.push(.person(friend.id)) } label: {
                         HStack(spacing: 10) {
                             AvatarView(person: friend, size: 32, frame: "none")
+                            Circle().fill(store.friendColor(friend.id)).frame(width: 9, height: 9)
                             Text(friend.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
                             Spacer()
                             if store.firstExplorer(place)?.by == friend.id {
@@ -54,6 +55,15 @@ struct PlaceFriendsCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .softCard()
+    }
+
+    /// Friends with this place on their map, then anyone else the place lists.
+    private var explorers: [Person] {
+        var people = store.friends.filter { friend in store.exploredPlaces(of: friend.id).contains { $0.id == place.id } }
+        for friend in store.friendsWhoVisited(place) where !people.contains(where: { $0.id == friend.id }) {
+            people.append(friend)
+        }
+        return people
     }
 
     private func walkedLabel(mine: Bool) -> String {

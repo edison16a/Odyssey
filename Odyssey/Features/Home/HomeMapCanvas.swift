@@ -94,7 +94,7 @@ struct HomeMapCanvas: View, Equatable {
                     .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
         .onMapCameraChange(frequency: .onEnd) { context in onCamera(context.region) }
     }
 }

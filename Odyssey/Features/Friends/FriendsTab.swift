@@ -2,10 +2,9 @@
 //  FriendsTab.swift
 //  Odyssey
 //
-//  Friends tab. Story bubbles across the top (a blue ring means new
-//  activity, grey means seen), then the pair up offer, a map of places
-//  friends explored with their photos, a weekly board and the feed.
-//  Ported from friends-tab.js.
+//  Friends tab. A map of where your friends explored, one hex color per
+//  friend, with their faces underneath to show one at a time, then your
+//  friends list and a way to add more.
 //
 
 import Foundation
@@ -14,28 +13,38 @@ import SwiftUI
 struct FriendsTab: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
+    @State private var focus: String?
 
     var body: some View {
+        let friends = store.friends
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header.id("top")
-                    storiesRow
-                    pairBanner.padding(.horizontal, Space.s5).padding(.top, Space.s5)
-                    section("Where friends explored", link: "Opt-in friends only") {
-                        Button { router.push(.friendsMap) } label: {
-                            FriendsMapPreview()
-                                .frame(height: 230)
-                                .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+                    if !friends.isEmpty {
+                        section("Where friends explored") {
+                            Button { router.push(.friendsMap) } label: {
+                                FriendsHexMap(ids: friends.map(\.id), focus: focus)
+                                    .frame(height: 300)
+                                    .allowsHitTesting(false)
+                                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+                                    .overlay(alignment: .topTrailing) {
+                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(Palette.ink)
+                                            .frame(width: 30, height: 30)
+                                            .background(.white.opacity(0.95), in: Circle())
+                                            .padding(10)
+                                    }
+                                    .contentShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+                            }
+                            .buttonStyle(PressStyle(scale: 0.99))
                         }
-                        .buttonStyle(PressStyle(scale: 0.99))
+                        FriendsLegend(people: friends, focus: $focus).padding(.top, Space.s3)
                     }
-                    section("This week", link: "Friends board") { weekly }
-                    section("Activity", link: nil) {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(store.feed) { post in FriendsPostCard(post: post) }
-                        }
+                    section("Your friends", link: friends.isEmpty ? nil : "\(friends.count)") {
+                        friendList(friends)
                     }
                     TabBarSpacer()
                 }
@@ -57,7 +66,7 @@ struct FriendsTab: View {
         .padding(.bottom, Space.s3)
     }
 
-    private func section<Content: View>(_ title: String, link: String?, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, link: String? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: title, link: link)
             content()
@@ -66,120 +75,50 @@ struct FriendsTab: View {
         .padding(.top, Space.s5)
     }
 
-    // MARK: Stories
-
-    private var storiesRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 14) {
-                myBubble
-                ForEach(store.storyPeople, id: \.self) { id in
-                    if let friend = store.person(id) { bubble(friend) }
-                }
-            }
-            .padding(.horizontal, Space.s5)
-            .padding(.vertical, 8)
-        }
-    }
-
-    private var myBubble: some View {
-        let mine = !store.posts(by: "me").isEmpty
-        return Button {
-            router.present(mine ? .story(personID: "me", postID: nil) : .checkIn(placeID: nil))
-        } label: {
-            VStack(spacing: 6) {
-                AvatarView(person: store.me, size: 64, frame: "none", ring: mine ? .new : .none)
-                    .overlay(alignment: .bottomTrailing) {
-                        if !mine {
-                            Image(systemName: "plus")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 22, height: 22)
-                                .background(Palette.accent, in: Circle())
-                                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-                                .offset(x: 2, y: 2)
-                        }
-                    }
-                    .padding(5)
-                Text("Your adventure").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-            }
-            .frame(width: 74)
-        }
-        .buttonStyle(PressStyle(scale: 0.94))
-    }
-
-    private func bubble(_ friend: Person) -> some View {
-        let fresh = store.posts(by: friend.id).contains { ["walk", "milestone", "day"].contains($0.kind) }
-        let ring: AvatarView.Ring = store.seen(friend.id) ? .seen : (fresh ? .new : .seen)
-        return Button {
-            router.present(.story(personID: friend.id, postID: nil))
-        } label: {
-            VStack(spacing: 6) {
-                AvatarView(person: friend, size: 64, frame: "none", ring: ring).padding(5)
-                Text(friend.firstName).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-            }
-            .frame(width: 74)
-        }
-        .buttonStyle(PressStyle(scale: 0.94))
-    }
-
-    // MARK: Pair up
-
-    private var pairBanner: some View {
-        let faces = ["diego", "nina"].compactMap { store.seed.person($0) }
-        let link = URL(string: "https://pathy.app/pair/\(store.state.user.handle)") ?? URL(string: "https://pathy.app")!
-        return HStack(spacing: 12) {
-            HStack(spacing: -10) {
-                ForEach(faces) { face in
-                    AvatarView(person: face, size: 30, frame: "none")
-                        .overlay(Circle().strokeBorder(Palette.ink, lineWidth: 2))
-                }
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Explore with a friend for 2x coins").font(.system(size: 15, weight: .bold))
-                Text("Check in at the same place together and you both earn double.")
-                    .font(.system(size: 13))
-                    .opacity(0.75)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            ShareLink(item: link, subject: Text("Explore with me on Odyssey"),
-                      message: Text("Check in with me on Odyssey and we both earn double coins.")) {
-                Text("Invite")
-            }
-            .buttonStyle(.pill(.light, height: 36))
-        }
-        .darkCard(padding: 14)
-    }
-
-    // MARK: Weekly board
-
-    /// Friends ranked by XP, with you slotted in, for a little rivalry.
-    private var weekly: some View {
-        let rows = Array((store.friends + [store.me]).sorted { $0.xp > $1.xp }.prefix(5))
-        return VStack(spacing: 0) {
-            ForEach(rows.indices, id: \.self) { i in
-                let person = rows[i]
-                if i > 0 { Rectangle().fill(Palette.line).frame(height: 1) }
-                Button { FriendsNav.person(person.id, router: router) } label: {
+    private func friendList(_ friends: [Person]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(friends) { friend in
+                Button { router.push(.person(friend.id)) } label: {
                     HStack(spacing: Space.s3) {
-                        Text("\(i + 1)")
-                            .font(.system(size: 13, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundStyle(Palette.muted)
-                            .frame(width: 18)
-                        AvatarView(person: person, size: 36)
-                        Text(person.id == "me" ? "You" : person.name)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(person.id == "me" ? Palette.accent : Palette.ink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("\(person.xp) XP").font(.system(size: 13, weight: .bold)).monospacedDigit().foregroundStyle(Palette.ink)
+                        AvatarView(person: friend, size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(friend.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                            Text(placesLabel(store.exploredPlaces(of: friend.id).count))
+                                .font(.system(size: 13)).foregroundStyle(Palette.muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Circle().fill(store.friendColor(friend.id)).frame(width: 12, height: 12)
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
                     }
                     .padding(.vertical, Space.s3)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                Rectangle().fill(Palette.line).frame(height: 1)
             }
+            Button { router.push(.addFriends) } label: {
+                HStack(spacing: Space.s3) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Palette.accent)
+                        .frame(width: 44, height: 44)
+                        .background(Palette.accentSoft, in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Add friends").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink)
+                        Text(friends.isEmpty ? "See where your friends explore" : "Find people you know")
+                            .font(.system(size: 13)).foregroundStyle(Palette.muted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
+                }
+                .padding(.vertical, Space.s3)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .card(padding: Space.s4)
+    }
+
+    private func placesLabel(_ n: Int) -> String {
+        n == 1 ? "Explored 1 place" : "Explored \(n) places"
     }
 }

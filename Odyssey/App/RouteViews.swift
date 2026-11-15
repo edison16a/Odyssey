@@ -55,7 +55,6 @@ struct CoverView: View {
     @ViewBuilder private var screen: some View {
         switch cover {
         case .checkIn(let id): CheckInFlow(placeID: id)
-        case .story(let person, let post): StoryViewer(startPersonID: person, postID: post)
         case .walkthrough(let id): WalkthroughFlow(placeID: id)
         case .dayShare: DayShareView()
         case .powerUp(let days): PowerUpPreview(days: days)

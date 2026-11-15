@@ -2,11 +2,10 @@
 //  WalkthroughFlow.swift
 //  Odyssey
 //
-//  The optional walkthrough, offered after a check-in. First the explorer
-//  agrees to a couple of simple rules and chooses what to share, then
-//  records 5 to 60 seconds inside, then the phone reads a few frames and
-//  the place's details improve. Sharing pays +50 XP and contribution
-//  points; nothing is shared without the explorer saying so.
+//  A video of a place, opened from a place screen. It opens straight onto
+//  the recorder, then the phone reads a few frames, the place's details
+//  improve and the video pays its XP and contribution points.
+//  The + button uses the same recorder and saving through CheckInFlow.
 //  Ported from features/walkthrough/walkthrough.js.
 //
 
@@ -18,25 +17,19 @@ struct WalkthroughFlow: View {
     @Environment(AppRouter.self) private var router
     var placeID: String
 
-    private enum Stage { case consent, record, analyzing, done }
+    private enum Stage { case record, analyzing, done }
 
-    @State private var stage: Stage = .consent
-    @State private var choice = WalkthroughChoice()
+    @State private var stage: Stage = .record
     @State private var seconds = 0
     @State private var simulated = false
-    @State private var analysis: WalkthroughAnalysis?
-    @State private var result: VideoResult?
-    @State private var payout: BountyPayout?
+    @State private var saved: WalkthroughSaved?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 IconButton(icon: "close", label: "Close") { router.dismissCover() }
-                Text("Walkthrough").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity)
-                Text("+\(Rewards.video.xp) XP")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Palette.muted)
-                    .frame(width: 40, alignment: .trailing)
+                Text(store.place(placeID)?.name ?? "Video").font(.system(size: 17, weight: .bold)).lineLimit(1).frame(maxWidth: .infinity)
+                Color.clear.frame(width: 40, height: 40)
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -55,65 +48,68 @@ struct WalkthroughFlow: View {
 
     @ViewBuilder private func content(_ place: Place) -> some View {
         switch stage {
-        case .consent:
-            WalkthroughConsent(place: place, choice: $choice) {
-                withAnimation(.easeInOut(duration: 0.3)) { stage = .record }
-            }
         case .record:
             WalkthroughRecorder(place: place) { length, video, isSimulated in
                 seconds = length
                 simulated = isSimulated
                 withAnimation(.easeInOut(duration: 0.3)) { stage = .analyzing }
-                Task { await analyze(place, video: video) }
+                Task {
+                    saved = await WalkthroughSaved.save(place, seconds: length, video: video, simulated: isSimulated, store: store)
+                    withAnimation(.easeInOut(duration: 0.3)) { stage = .done }
+                }
             }
         case .analyzing:
-            VStack(spacing: 8) {
-                Spacer()
-                GlobieView(mood: .happy, form: store.streakTier.id, size: 96)
-                Text("Watching your walkthrough").font(.system(size: 22, weight: .bold)).tracking(-0.4).padding(.top, 6)
-                Text("\(seconds) seconds, 4 frames\(simulated ? ", simulated walk" : "")").mutedStyle(15)
-                WalkthroughDots().padding(.top, 8)
-                Spacer()
-            }
+            WalkthroughAnalyzing(seconds: seconds, simulated: simulated)
         case .done:
-            if let analysis {
-                WalkthroughResultView(place: place, analysis: analysis, result: result, payout: payout, shared: choice.share) {
+            if let saved {
+                WalkthroughResultView(place: place, analysis: saved.analysis, result: saved.result, payout: saved.payout) {
                     router.dismissCover()
                 }
             }
         }
     }
+}
 
-    /// Read the frames, wait at least a moment so it never flashes past, then save.
-    private func analyze(_ place: Place, video: URL?) async {
+/// What saving a video found and paid.
+struct WalkthroughSaved {
+    var analysis: WalkthroughAnalysis
+    var result: VideoResult
+    var payout: BountyPayout?
+
+    /// Read the frames, wait at least a moment so it never flashes past, then save the
+    /// contribution locally and to the cloud, and delete the local file.
+    static func save(_ place: Place, seconds: Int, video: URL?, simulated: Bool, store: AppStore) async -> WalkthroughSaved {
         let start = Date()
         let photos = simulated ? WalkthroughRecorder.shots(for: place) : []
         let found = await WalkthroughAnalyzer.analyze(place: place, video: video, photos: photos, store: store)
         let left = 1.6 - Date().timeIntervalSince(start)
         if left > 0 { try? await Task.sleep(for: .seconds(left)) }
-        if choice.share {
-            let saved = store.addVideo(place, seconds: seconds, insights: found.insights)
-            Cloud.shared.recordWalkthrough(place, seconds: seconds, video: simulated ? nil : video,
-                                           insights: found.insights, points: saved.points)
-            result = saved
-            if !saved.already { payout = store.bountyPayout(for: place) }
-        } else {
-            store.update { s in s.placeInsights[place.id] = found.insights }
-        }
-        analysis = found
-        withAnimation(.easeInOut(duration: 0.3)) { stage = .done }
+        let result = store.addVideo(place, seconds: seconds, insights: found.insights)
+        Cloud.shared.recordWalkthrough(place, seconds: seconds, video: simulated ? nil : video,
+                                       insights: found.insights, points: result.points)
+        let payout = result.already ? nil : store.bountyPayout(for: place)
         if let video { try? FileManager.default.removeItem(at: video) }
+        return WalkthroughSaved(analysis: found, result: result, payout: payout)
     }
 }
 
-/// What the explorer agreed to and chose to share.
-struct WalkthroughChoice {
-    var publicOnly = false
-    var noCloseUps = false
-    var share = true
-    var guides = false
+/// Globie watching the video while the phone reads it.
+struct WalkthroughAnalyzing: View {
+    @Environment(AppStore.self) private var store
+    var seconds: Int
+    var simulated: Bool
 
-    var ready: Bool { publicOnly && noCloseUps }
+    var body: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            GlobieView(mood: .happy, form: store.streakTier.id, size: 96)
+            Text("Watching your video").font(.system(size: 22, weight: .bold)).tracking(-0.4).padding(.top, 6)
+            Text("\(seconds) seconds\(simulated ? ", simulated" : "")").mutedStyle(15)
+            WalkthroughDots().padding(.top, 8)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
 
 /// Three pulsing dots while the phone reads the video.

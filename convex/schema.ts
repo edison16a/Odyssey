@@ -22,6 +22,19 @@ const insights = v.object({
 export default defineSchema({
   ...authTables,
 
+  /** Text-in sign-ins: a code the user texts to the Odyssey line (see phoneAuth.ts). */
+  phoneLogins: defineTable({
+    code: v.string(),
+    nonce: v.string(),
+    status: v.string(), // "pending" | "confirmed" | "used"
+    phone: v.optional(v.string()),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    confirmedAt: v.optional(v.number()),
+  })
+    .index("by_code", ["code"])
+    .index("by_nonce", ["nonce"]),
+
   // ── Explorers ────────────────────────────────────────────────────────
   profiles: defineTable({
     userId: v.id("users"),
@@ -153,11 +166,14 @@ export default defineSchema({
     status: v.string(), // "pending" | "verified" | "rejected"
     bountyId: v.optional(v.string()),
     points: v.number(),
+    /** "seed" for the demo history written by seed:contributionHistory. */
+    source: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_place", ["placeId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_source", ["source"]),
 
   // ── Taste and recommendations ───────────────────────────────────────
   /** Every signal the explorer gives: swipes, stars, check-ins, walkthroughs. */

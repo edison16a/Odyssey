@@ -64,7 +64,7 @@ struct AdventureHistoryView: View {
         let place = store.place(post.placeId)
         let when = post.createdAt.map { Format.shortDate($0) + ", " + Format.clock($0) } ?? "Today"
         return Button {
-            router.present(.story(personID: "me", postID: post.id))
+            router.push(.place(post.placeId))
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Color.clear

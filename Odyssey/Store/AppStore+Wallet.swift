@@ -118,6 +118,7 @@ extension AppStore {
             s.wallet.coins -= price
             s.giftCards.insert(redeemed, at: 0)
         }
+        Cloud.shared.recordGiftCard(redeemed)
         return redeemed
     }
 }

@@ -14,7 +14,7 @@ export const removeUsersByEmailPrefix = internalMutation({
   args: { prefix: v.string() },
   handler: async (ctx, { prefix }) => {
     if (prefix.length < 4) throw new Error("Prefix too short");
-    const users = (await ctx.db.query("users").collect()).filter((u) => u.email?.startsWith(prefix));
+    const users = (await ctx.db.query("users").collect()).filter((u) => u.email?.startsWith(prefix) || u.phone?.startsWith(prefix));
     const removed: string[] = [];
     for (const user of users) {
       const userId = user._id as Id<"users">;
@@ -36,6 +36,8 @@ export const removeUsersByEmailPrefix = internalMutation({
           await ctx.db.delete(row._id);
         }
       }
+      const bounties = await ctx.db.query("bounties").withIndex("by_owner", (q) => q.eq("ownerId", userId)).collect();
+      for (const b of bounties) await ctx.db.delete(b._id);
       const likes = await ctx.db.query("likes").withIndex("by_user_post", (q) => q.eq("userId", userId)).collect();
       for (const l of likes) await ctx.db.delete(l._id);
       const media = await ctx.db.query("media").withIndex("by_owner", (q) => q.eq("ownerId", userId)).collect();
@@ -45,7 +47,19 @@ export const removeUsersByEmailPrefix = internalMutation({
         for (const row of rows) await ctx.db.delete(row._id);
       }
       await ctx.db.delete(userId);
-      removed.push(user.email ?? userId);
+      removed.push(user.email ?? user.phone ?? userId);
+    }
+    return { removed };
+  },
+});
+
+/** Delete bounties whose owner account no longer exists. */
+export const removeOrphanBounties = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let removed = 0;
+    for (const b of await ctx.db.query("bounties").collect()) {
+      if (b.ownerId && !(await ctx.db.get(b.ownerId))) { await ctx.db.delete(b._id); removed++; }
     }
     return { removed };
   },

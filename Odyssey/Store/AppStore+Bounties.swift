@@ -85,6 +85,7 @@ extension AppStore {
         b.crew = []
         b.mine = true
         update { s in s.myBounties.insert(b, at: 0) }
+        Cloud.shared.recordBounty(b)
         return b
     }
 
@@ -106,6 +107,7 @@ extension AppStore {
             else { s.wallet.coins -= giftCardPrice(amount) }
             s.giftCards.insert(redeemed, at: 0)
         }
+        Cloud.shared.recordGiftCard(redeemed)
         return redeemed
     }
 }
