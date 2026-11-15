@@ -4,7 +4,7 @@
 //
 //  Explore: a full screen, swipe-up feed of real places around you, ranked
 //  by what you love. Swipe up to pass, double tap or tap the heart to save,
-//  and your taste gem in the corner grows with every save. Chips along the
+//  and your taste gem in the corner reacts to every save. Chips along the
 //  top filter for the practical things (wifi, a bathroom, outlets...), and
 //  search and categories sit behind the magnifying glass. Every save teaches
 //  the same taste model the rest of the app uses.
@@ -24,11 +24,8 @@ struct ExploreTab: View {
     @State private var showLocation = false
     @State private var showSearch = false
     @State private var feeding = false
-    /// "+1"s on their way to the gem.
-    @State private var sparkles: [UUID] = []
+    /// Bumped on every fresh save so the gem gives a small pop.
     @State private var gemPops = 0
-    @State private var gemNote: String?
-    @State private var noteTask: Task<Void, Never>?
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -41,21 +38,17 @@ struct ExploreTab: View {
                 GeometryReader { geo in
                     ZStack(alignment: .top) {
                         content(size: geo.size)
-                        LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
-                            .frame(height: topInset + 130)
+                        LinearGradient(colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: topInset + 100)
                             .allowsHitTesting(false)
-                        topBar.padding(.top, topInset + 4)
-                        ForEach(sparkles, id: \.self) { _ in
-                            GemSparkle(from: CGPoint(x: geo.size.width - 45, y: geo.size.height - 310),
-                                       to: CGPoint(x: Space.s4 + 23, y: topInset + 4 + 24))
-                        }
+                        topBar.padding(.top, topInset + Space.s2)
                     }
                 }
                 .ignoresSafeArea(edges: .top)
                 Color.clear.frame(height: Self.tabBarHeight)
             }
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(Palette.ink.ignoresSafeArea())
         .overlay {
             if !store.state.tipsSeen.contains(Self.tipKey) {
                 ExploreCoachMarks {
@@ -144,39 +137,39 @@ struct ExploreTab: View {
     }
 
     private var loadingPage: some View {
-        VStack(spacing: 14) {
-            ProgressView().tint(.white).controlSize(.large)
+        VStack(spacing: Space.s3) {
+            ProgressView().tint(.white)
             Text("Finding places around you")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.8))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.6))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(LinearGradient(colors: [Color(hex: "#1d2330"), .black], startPoint: .top, endPoint: .bottom))
+        .background(Palette.ink)
     }
 
     private var emptyPage: some View {
         let filtered = !amenities.isEmpty
         let names = ExploreAmenity.allCases.filter { amenities.contains($0) }.map { $0.label.lowercased() }
-        return VStack(spacing: 12) {
-            Image(systemName: filtered ? "line.3.horizontal.decrease.circle" : "map")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.bottom, 4)
+        return VStack(spacing: Space.s2) {
+            Image(systemName: filtered ? "line.3.horizontal.decrease" : "map")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.bottom, Space.s2)
             Text(filtered ? "Nothing with all of that yet" : "That is everything around here")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 20, weight: .bold))
                 .tracking(-0.4)
             Text(filtered
                  ? "No places nearby have \(Self.list(names)). Try fewer filters."
                  : "Try another filter, or pick another place to explore.")
                 .font(.system(size: 15))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.white.opacity(0.6))
             if feeding {
-                HStack(spacing: 8) {
+                HStack(spacing: Space.s2) {
                     ProgressView().tint(.white).controlSize(.small)
-                    Text("Looking further out").font(.system(size: 13, weight: .semibold))
+                    Text("Looking further out").font(.system(size: 13, weight: .medium))
                 }
-                .foregroundStyle(.white.opacity(0.7))
-                .padding(.top, 4)
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.top, Space.s1)
             }
             HStack(spacing: 10) {
                 if filtered {
@@ -190,13 +183,13 @@ struct ExploreTab: View {
                     Button("Change place") { showLocation = true }.buttonStyle(.pill(.glass, height: 44))
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, Space.s3)
         }
         .foregroundStyle(.white)
         .multilineTextAlignment(.center)
         .padding(.horizontal, Space.s8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(LinearGradient(colors: [Color(hex: "#1d2330"), .black], startPoint: .top, endPoint: .bottom))
+        .background(Palette.ink)
     }
 
     private static func list(_ items: [String]) -> String {
@@ -232,13 +225,12 @@ struct ExploreTab: View {
     // MARK: Actions
 
     private func like(_ place: Place) {
-        let before = TasteGem.of(store)
         let fresh = store.voteOf(place) != 1
         if fresh { store.vote(place, 1) }
         if !store.isStarred(place) { store.toggleStar(place) }
         guard fresh else { Haptics.soft(); return }
         Haptics.success()
-        celebrate(levelBefore: before.level)
+        gemPops += 1
     }
 
     private func toggleLike(_ place: Place) {
@@ -267,66 +259,40 @@ struct ExploreTab: View {
         NearbyService.directions(to: place)
     }
 
-    /// Fly a "+1" into the gem, pop it, and say how far the next level is.
-    private func celebrate(levelBefore: Int) {
-        let id = UUID()
-        sparkles.append(id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-            sparkles.removeAll { $0 == id }
-            gemPops += 1
-            Haptics.tap()
-            let gem = TasteGem.of(store)
-            let note: String
-            if gem.level > levelBefore {
-                note = "Level up! Level \(gem.level)"
-            } else if gem.toNext == 0 {
-                note = "Level \(gem.level) · max level"
-            } else {
-                note = "Level \(gem.level) · \(gem.toNext) save\(gem.toNext == 1 ? "" : "s") to next"
-            }
-            gemNote = note
-            noteTask?.cancel()
-            noteTask = Task {
-                try? await Task.sleep(for: .seconds(2.4))
-                guard !Task.isCancelled else { return }
-                gemNote = nil
-            }
-        }
-    }
-
     // MARK: Top bar
 
+    /// One compact row (your gem, where you are, search) and one slim row of
+    /// amenity filters under it.
     private var topBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ExploreGemHUD(gem: TasteGem.of(store), pops: gemPops, note: gemNote) {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s2) {
+                ExploreGemHUD(gem: TasteGem.of(store), pops: gemPops) {
                     Haptics.tap()
                     router.push(.tasteProfile)
                 }
-                Spacer(minLength: 4)
+                .layoutPriority(1)
+                Spacer(minLength: Space.s1)
                 Button { showLocation = true } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "location.fill").font(.system(size: 11, weight: .bold))
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill").font(.system(size: 10, weight: .semibold))
                         Text(store.exploreLocation.label.split(separator: ",").first.map(String.init) ?? "Nearby")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 11)
-                    .frame(height: 34)
-                    .frame(maxWidth: 130)
-                    .background(Capsule().fill(.black.opacity(0.34)))
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 1))
+                    .padding(.horizontal, Space.s3)
+                    .frame(height: ExploreChrome.height)
+                    .frame(maxWidth: 140)
+                    .background(ExploreChrome.fill, in: Capsule())
                 }
-                .buttonStyle(PressStyle(scale: 0.94))
+                .buttonStyle(PressStyle(scale: 0.95))
                 .accessibilityLabel("Explore location")
                 Button { Haptics.tap(); showSearch = true } label: {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(.black.opacity(0.34)))
-                        .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 1))
+                        .frame(width: ExploreChrome.height, height: ExploreChrome.height)
+                        .background(ExploreChrome.fill, in: Circle())
                 }
                 .buttonStyle(PressStyle(scale: 0.92))
                 .accessibilityLabel("Search and categories")
@@ -338,14 +304,14 @@ struct ExploreTab: View {
 
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 if feed.filter != .all {
-                    ExploreGlassChip(label: filterLabel, icon: "magnifyingglass", isOn: true, trailing: "xmark") {
+                    ExploreGlassChip(label: filterLabel, icon: nil, isOn: true, trailing: "xmark") {
                         pick(.all)
                     }
                 }
                 ForEach(ExploreAmenity.allCases) { a in
-                    ExploreGlassChip(label: a.label, icon: a.icon, isOn: amenities.contains(a)) {
+                    ExploreGlassChip(label: a.label, icon: nil, isOn: amenities.contains(a)) {
                         Haptics.tap()
                         withAnimation(.easeOut(duration: 0.2)) {
                             if amenities.contains(a) { amenities.remove(a) } else { amenities.insert(a) }

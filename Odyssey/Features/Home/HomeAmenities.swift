@@ -169,28 +169,6 @@ struct HomeAmenityChips: View {
     }
 }
 
-/// The big "Nearest bathroom" button on the map card.
-struct HomeNearestBathroomButton: View {
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: "toilet.fill").font(.system(size: 13, weight: .bold))
-                Text("Nearest bathroom").font(.system(size: 14, weight: .heavy))
-                Image(systemName: "location.north.fill").font(.system(size: 10, weight: .bold)).opacity(0.85)
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .background(AmenityStyle.color("bathroom"), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.6), lineWidth: 1.5))
-            .shadow(color: AmenityStyle.color("bathroom").opacity(0.45), radius: 8, y: 3)
-        }
-        .buttonStyle(PressStyle(scale: 0.95))
-    }
-}
-
 /// The sheet for a tapped amenity: what it is, who can use it, how far, and directions.
 struct AmenitySheet: View {
     @Environment(AppStore.self) private var store

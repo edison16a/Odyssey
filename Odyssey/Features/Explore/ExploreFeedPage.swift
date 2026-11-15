@@ -4,8 +4,8 @@
 //
 //  One screen of the Explore feed: the place's photo edge to edge, its
 //  name, how far it is and why Odyssey picked it, what it has (wifi, a
-//  bathroom...), any Whop deal, and the action rail down the right side.
-//  Double tap anywhere to save it with a heart burst.
+//  bathroom...), any Whop deal, and a small action rail on the right.
+//  Double tap anywhere to save it.
 //
 
 import Foundation
@@ -20,32 +20,35 @@ struct ExploreFeedPage: View {
     var onDirections: () -> Void
     var onDetails: () -> Void
 
-    @State private var bursts: [HeartBurst] = []
+    @State private var hearts: [HeartBurst] = []
+
+    /// Room kept clear on the right of the text for the rail.
+    private static let railWidth: CGFloat = 64
 
     var body: some View {
         let metres = store.metres(to: place)
         ZStack(alignment: .bottomLeading) {
             photo
-            LinearGradient(stops: [.init(color: .clear, location: 0.38),
-                                   .init(color: .black.opacity(0.55), location: 0.7),
-                                   .init(color: .black.opacity(0.88), location: 1)],
+            LinearGradient(stops: [.init(color: .clear, location: 0.5),
+                                   .init(color: .black.opacity(0.45), location: 0.78),
+                                   .init(color: .black.opacity(0.7), location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .allowsHitTesting(false)
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2, coordinateSpace: .local) { point in
-                    let burst = HeartBurst(point: point, tilt: Double.random(in: -18...18))
-                    bursts.append(burst)
+                    let heart = HeartBurst(point: point)
+                    hearts.append(heart)
                     onLike()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                        bursts.removeAll { $0.id == burst.id }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        hearts.removeAll { $0.id == heart.id }
                     }
                 }
             info(metres)
                 .allowsHitTesting(false)
-            ForEach(bursts) { burst in
-                HeartBurstView(tilt: burst.tilt)
-                    .position(burst.point)
+            ForEach(hearts) { heart in
+                HeartBurstView()
+                    .position(heart.point)
                     .allowsHitTesting(false)
             }
         }
@@ -53,12 +56,12 @@ struct ExploreFeedPage: View {
         .clipped()
     }
 
-    /// The photo, over a dark tinted fallback for places without one.
+    /// The photo, over a plain dark fallback for places without one.
     private var photo: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#2a3242"), Color(hex: "#11141b")], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Palette.ink
             Image(systemName: Icon.symbol(store.placeKind(place).icon))
-                .font(.system(size: 90, weight: .semibold))
+                .font(.system(size: 72, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.08))
             PhotoView(path: place.photo, placeholder: .clear)
         }
@@ -74,146 +77,127 @@ struct ExploreFeedPage: View {
     private func info(_ metres: Double) -> some View {
         let kind = store.placeKind(place)
         let amenities = ExploreAmenity.of(place, store: store)
-        return VStack(alignment: .leading, spacing: 8) {
-            if let deal = bestDeal { dealPill(deal) }
+        let shown = Array(amenities.prefix(3))
+        return VStack(alignment: .leading, spacing: 6) {
+            if let deal = bestDeal { dealTag(deal).padding(.bottom, 2) }
             Text(place.name)
-                .font(.system(size: 30, weight: .heavy))
-                .tracking(-0.7)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-            HStack(spacing: 6) {
-                Image(systemName: Icon.symbol(kind.icon)).font(.system(size: 12, weight: .bold))
-                Text("\(kind.label) · \(Format.distance(metres)) · \(Format.walkTime(metres))")
-                    .lineLimit(1)
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .opacity(0.92)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                .font(.system(size: 26, weight: .bold))
+                .tracking(-0.6)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text("\(kind.label) · \(Format.distance(metres)) · \(Format.walkTime(metres))")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+            HStack(spacing: 5) {
                 OdysseyMark(size: 11)
-                Text(store.why(place, metres: metres)).lineLimit(2)
+                Text(store.why(place, metres: metres)).lineLimit(1)
             }
-            .font(.system(size: 13, weight: .medium))
-            .opacity(0.88)
-            if !amenities.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(amenities) { a in
+            .font(.system(size: 13))
+            .foregroundStyle(.white.opacity(0.85))
+            if !shown.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(shown) { a in
                         HStack(spacing: 4) {
-                            Image(systemName: a.icon).font(.system(size: 10, weight: .bold))
-                            Text(a.label).font(.system(size: 11, weight: .bold))
+                            Image(systemName: a.icon).font(.system(size: 9, weight: .semibold))
+                            Text(a.label).font(.system(size: 11, weight: .semibold))
                         }
                         .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .background(.white.opacity(0.18), in: Capsule())
+                        .frame(height: 22)
+                        .background(.white.opacity(0.16), in: Capsule())
+                        .fixedSize()
+                    }
+                    if amenities.count > shown.count {
+                        Text("+\(amenities.count - shown.count)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                 }
-                .padding(.top, 2)
+                .padding(.top, 4)
             }
         }
         .foregroundStyle(.white)
-        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
         .padding(.leading, Space.s4)
-        .padding(.trailing, 92)
-        .padding(.bottom, 22)
+        .padding(.trailing, Self.railWidth + Space.s2)
+        .padding(.bottom, Space.s5)
     }
 
-    private func dealPill(_ deal: Deal) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "tag.fill").font(.system(size: 11, weight: .bold))
+    private func dealTag(_ deal: Deal) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "tag.fill").font(.system(size: 9, weight: .bold))
             Text(deal.percent > 0 ? "\(deal.percent)% off · via Whop" : "\(deal.title) · via Whop")
                 .lineLimit(1)
         }
-        .font(.system(size: 12, weight: .heavy))
+        .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(Palette.ink)
-        .padding(.horizontal, 10)
-        .frame(height: 26)
+        .padding(.horizontal, 8)
+        .frame(height: 22)
         .background(Palette.gold, in: Capsule())
     }
 
     private var rail: some View {
         let liked = store.voteOf(place) == 1
         let disliked = store.voteOf(place) == -1
-        return VStack(spacing: 16) {
-            RailButton(icon: liked ? "heart.fill" : "heart", label: liked ? "Saved" : "Save",
-                       tint: liked ? Color(hex: "#ff3b5c") : .white, bounce: liked, action: onToggleLike)
-                .accessibilityLabel(liked ? "Unsave" : "Save")
-            RailButton(icon: disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown", label: "Not for me",
-                       tint: .white, bounce: disliked, action: onNotForMe)
-            RailButton(icon: "location.north.fill", label: "Go", tint: .white, bounce: false, action: onDirections)
-                .accessibilityLabel("Directions")
-            RailButton(icon: "info.circle.fill", label: "Details", tint: .white, bounce: false, action: onDetails)
+        return VStack(spacing: Space.s3) {
+            RailButton(icon: liked ? "heart.fill" : "heart", tint: liked ? Palette.danger : .white,
+                       filled: liked, label: liked ? "Unsave" : "Save", action: onToggleLike)
+            RailButton(icon: disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown", tint: .white,
+                       filled: false, label: "Not for me", action: onNotForMe)
+            RailButton(icon: "location.north.fill", tint: .white,
+                       filled: false, label: "Directions", action: onDirections)
+            RailButton(icon: "info", tint: .white,
+                       filled: false, label: "Details", action: onDetails)
         }
-        .padding(.trailing, 10)
-        .padding(.bottom, 22)
+        .frame(width: Self.railWidth)
+        .padding(.bottom, Space.s5)
     }
 }
 
-/// One round button on the right with its label underneath.
+/// One small round button on the right. A saved heart sits on a white disc
+/// so the red reads clearly; everything else is a quiet dark circle.
 private struct RailButton: View {
     var icon: String
-    var label: String
     var tint: Color
-    var bounce: Bool
+    var filled: Bool
+    var label: String
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(tint)
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: bounce)
-                    .frame(width: 50, height: 50)
-                    .background(Circle().fill(.black.opacity(0.28)))
-                    .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
-                Text(label)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .frame(width: 70)
-            .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(tint)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 44, height: 44)
+                .background(filled ? Color.white : ExploreChrome.fill, in: Circle())
+                .animation(.easeOut(duration: 0.18), value: filled)
         }
-        .buttonStyle(PressStyle(scale: 0.88))
+        .buttonStyle(PressStyle(scale: 0.9))
+        .accessibilityLabel(label)
     }
 }
 
 struct HeartBurst: Identifiable {
     let id = UUID()
     var point: CGPoint
-    var tilt: Double
 }
 
-/// The big heart that pops where you double tapped, then floats up and fades.
+/// A white heart that pops where you double tapped, then fades.
 struct HeartBurstView: View {
-    var tilt: Double
-    var size: CGFloat = 110
+    var size: CGFloat = 84
     @State private var phase = 0
 
     var body: some View {
-        ZStack {
-            ForEach(0..<6, id: \.self) { i in
-                Circle()
-                    .fill(Color(hex: "#ff6b8a"))
-                    .frame(width: 10, height: 10)
-                    .offset(y: phase == 0 ? 0 : -size * 0.75)
-                    .rotationEffect(.degrees(Double(i) * 60))
-                    .opacity(phase == 1 ? 1 : 0)
+        Image(systemName: "heart.fill")
+            .font(.system(size: size))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.2), radius: 10, y: 2)
+            .scaleEffect(phase == 0 ? 0.5 : 1)
+            .opacity(phase == 1 ? 0.95 : 0)
+            .onAppear {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.6)) { phase = 1 }
+                withAnimation(.easeOut(duration: 0.3).delay(0.4)) { phase = 2 }
             }
-            Image(systemName: "heart.fill")
-                .font(.system(size: size))
-                .foregroundStyle(LinearGradient(colors: [Color(hex: "#ff7a95"), Color(hex: "#ff2d55")],
-                                                startPoint: .top, endPoint: .bottom))
-                .shadow(color: Color(hex: "#ff2d55").opacity(0.5), radius: 18)
-        }
-        .rotationEffect(.degrees(tilt))
-        .scaleEffect(phase == 0 ? 0.2 : (phase == 1 ? 1 : 1.3))
-        .opacity(phase == 2 ? 0 : 1)
-        .offset(y: phase == 2 ? -70 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { phase = 1 }
-            withAnimation(.easeIn(duration: 0.35).delay(0.45)) { phase = 2 }
-        }
     }
 }

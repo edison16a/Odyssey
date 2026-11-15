@@ -15,12 +15,53 @@ import Foundation
 import Photos
 import PhotosUI
 import SwiftUI
+import Vision
 
 // MARK: Photos
+
+/// What we learned from the photo library: how many photos, and how many are outdoors.
+struct PhotoScan: Equatable {
+    var total = 0
+    var scanned = 0
+    var outdoor = 0
+    var fromSamples = false
+    var outdoorShare: Double { scanned == 0 ? 0 : Double(outdoor) / Double(scanned) }
+}
 
 /// Loads small thumbnails from the photo library, a picker, or the bundled place photos.
 nonisolated enum OnboardingPhotoLoader {
     static let side: CGFloat = 300
+
+    /// Every image in the library (count only, cheap).
+    static func libraryCount() -> Int {
+        PHAsset.fetchAssets(with: .image, options: nil).count
+    }
+
+    /// Scene labels that mean a photo was taken outside.
+    private static let outdoorLabels: Set<String> = [
+        "outdoor", "sky", "landscape", "mountain", "beach", "shore", "ocean", "sea", "lake", "river", "waterfall",
+        "forest", "tree", "park", "garden", "field", "grass", "hill", "cliff", "canyon", "desert", "snow",
+        "sunset_sunrise", "sunrise_sunset", "cloudy", "cityscape", "street", "bridge", "trail", "hiking", "camping",
+        "land", "water_body", "waterways", "waterfall", "foliage", "plant", "flower", "blue_sky", "mountains", "outdoors",
+        "coast", "rocks", "volcano", "glacier", "jungle", "meadow", "farm", "vineyard", "skyline", "palm_tree",
+    ]
+
+    /// How many of these photos were taken outdoors, using Apple's on-device scene classifier.
+    @concurrent
+    static func countOutdoor(_ images: [UIImage]) async -> Int {
+        var count = 0
+        for image in images {
+            guard let cg = image.cgImage else { continue }
+            let request = VNClassifyImageRequest()
+            #if targetEnvironment(simulator)
+            request.usesCPUOnly = true // the simulator has no Neural Engine
+            #endif
+            try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
+            let hits = (request.results ?? []).filter { $0.confidence > 0.15 && outdoorLabels.contains($0.identifier) }
+            if !hits.isEmpty { count += 1 }
+        }
+        return count
+    }
 
     /// The most recent images in the library, newest first. Needs read access.
     @concurrent
@@ -97,6 +138,7 @@ nonisolated enum OnboardingPhotoLoader {
 struct OnboardingConnectStep: View {
     @Environment(AppStore.self) private var store
     @Binding var photos: [UIImage]
+    @Binding var scan: PhotoScan
     var done: () -> Void
 
     enum Link: Equatable { case idle, working, connected }
@@ -111,63 +153,69 @@ struct OnboardingConnectStep: View {
     @State private var shown = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
             Spacer(minLength: 0)
-            Image(systemName: "sparkles")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .frame(width: 56, height: 56)
-                .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .padding(.bottom, 6)
-            Text("Make Odyssey yours").font(.system(size: 28, weight: .bold)).tracking(-0.8)
-            Text("Connect what you already have and we will cut a taste gem that is yours alone.")
-                .font(.system(size: 15))
-                .foregroundStyle(.white.opacity(0.72))
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Make Odyssey yours")
+                    .font(.system(size: 26, weight: .bold)).tracking(-0.6)
+                    .foregroundStyle(Palette.ink)
+                Text("Connect what you already use. We read it once to cut your taste gem.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Palette.muted)
+                    .padding(.top, 6)
 
-            VStack(spacing: 0) {
-                photosRow
-                divider
-                sourceRow(
-                    badge: AnyView(letterBadge("G", Color(hex: "#4285F4"))),
-                    title: "Google", optional: true, link: google,
-                    detail: google == .connected ? "Connected · 38 saved places, 112 reviews"
-                        : google == .working ? "Connecting to Google…" : "Saved places and reviews",
-                    action: { fakeConnect($google) }
-                )
-                divider
-                sourceRow(
-                    badge: AnyView(letterBadge("y", Color(hex: "#d32323"))),
-                    title: "Yelp", optional: true, link: yelp,
-                    detail: yelp == .connected ? "Connected · 21 bookmarks"
-                        : yelp == .working ? "Connecting to Yelp…" : "Bookmarks and check-ins",
-                    action: { fakeConnect($yelp) }
-                )
-            }
-            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(.white.opacity(0.16), lineWidth: 1))
-            .padding(.top, 6)
-            .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 16)
+                VStack(spacing: 0) {
+                    photosRow
+                    divider
+                    sourceRow(logo: AnyView(logoTile(Image("LogoGoogle").resizable().scaledToFit().padding(10), background: .white)),
+                              title: "Google Maps", link: google,
+                              detail: google == .connected ? "38 saved places · 112 reviews"
+                                  : google == .working ? "Connecting…" : "Saved places",
+                              action: { fakeConnect($google) })
+                    divider
+                    sourceRow(logo: AnyView(logoTile(Image("LogoYelp").resizable().scaledToFit().padding(9), background: Color(hex: "#FF1A1A"))),
+                              title: "Yelp", link: yelp,
+                              detail: yelp == .connected ? "21 bookmarks · 9 check-ins"
+                                  : yelp == .working ? "Connecting…" : "Bookmarks",
+                              action: { fakeConnect($yelp) })
+                }
+                .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+                .padding(.top, 20)
 
-            HStack(spacing: 8) {
-                Image(systemName: "lock.fill").font(.system(size: 11, weight: .semibold))
-                Text("Photos stay on your phone. Google and Yelp are optional.")
-                    .font(.system(size: 12))
-            }
-            .foregroundStyle(.white.opacity(0.6))
-            .padding(.bottom, 4)
-
-            Button("Build my taste gem") { proceed() }
-                .buttonStyle(AuthBigButtonStyle())
-                .disabled(photoLink == .working)
-            Button("Skip for now") { proceed() }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.8))
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill").font(.system(size: 10, weight: .semibold))
+                    Text("Photos never leave your phone.")
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Palette.muted)
                 .frame(maxWidth: .infinity)
+                .padding(.top, 14)
+
+                Button { proceed() } label: {
+                    Text(anyConnected ? "Build my taste gem" : "Continue")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(Palette.ink, in: Capsule())
+                }
+                .buttonStyle(PressStyle())
+                .disabled(photoLink == .working)
+                .padding(.top, 16)
+                Button("Skip for now") { proceed() }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Palette.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+            }
+            .padding(22)
+            .background(.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .shadow(color: .black.opacity(0.25), radius: 30, y: 10)
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 30)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 14)
         .photosPicker(isPresented: $picking, selection: $picked, maxSelectionCount: 24, matching: .images)
         .onChange(of: picking) { _, open in
             // Closed the picker without choosing anything: use the sample photos.
@@ -178,7 +226,7 @@ struct OnboardingConnectStep: View {
             photoLink = .working
             Task {
                 let images = await OnboardingPhotoLoader.picked(items)
-                if images.isEmpty { useSamples() } else { connectPhotos(images) }
+                if images.isEmpty { useSamples() } else { connectPhotos(images, total: images.count) }
             }
         }
         .task {
@@ -187,48 +235,44 @@ struct OnboardingConnectStep: View {
         }
     }
 
+    private var anyConnected: Bool { [photoLink, google, yelp].contains(.connected) }
+
     // MARK: Rows
 
     private var divider: some View {
-        Rectangle().fill(.white.opacity(0.12)).frame(height: 1).padding(.leading, 66)
+        Rectangle().fill(Palette.line).frame(height: 1).padding(.leading, 70)
+    }
+
+    private func logoTile<Content: View>(_ content: Content, background: Color) -> some View {
+        content
+            .frame(width: 44, height: 44)
+            .background(background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.black.opacity(0.08), lineWidth: 1))
     }
 
     private var photosRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sourceRow(
-                badge: AnyView(
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(LinearGradient(colors: [Color(hex: "#ff9f0a"), Color(hex: "#ff375f"), Color(hex: "#5e5ce6")],
-                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                ),
-                title: "Photos", optional: false, link: photoLink,
-                detail: photoDetail,
-                action: startPhotos
-            )
+        VStack(alignment: .leading, spacing: 0) {
+            sourceRow(logo: AnyView(logoTile(PhotosPinwheel().padding(8), background: .white)),
+                      title: "Photos", link: photoLink, detail: photoDetail, action: startPhotos)
             if photoLink == .connected && !photos.isEmpty {
-                HStack(spacing: -10) {
-                    ForEach(Array(photos.prefix(8).enumerated()), id: \.offset) { i, image in
+                HStack(spacing: 4) {
+                    ForEach(Array(photos.prefix(6).enumerated()), id: \.offset) { _, image in
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 34, height: 34)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.black.opacity(0.5), lineWidth: 1.5))
-                            .zIndex(Double(8 - i))
+                            .frame(width: 36, height: 36)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    if photos.count > 8 {
-                        Text("+\(photos.count - 8)")
+                    if photos.count > 6 {
+                        Text("+\(photos.count - 6)")
                             .font(.system(size: 12, weight: .bold))
-                            .padding(.leading, 18)
-                            .foregroundStyle(.white.opacity(0.75))
+                            .foregroundStyle(Palette.muted)
+                            .frame(width: 36, height: 36)
+                            .background(Palette.surface3, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                 }
-                .padding(.leading, 66)
-                .padding(.bottom, 12)
+                .padding(.leading, 70)
+                .padding(.bottom, 14)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -236,50 +280,36 @@ struct OnboardingConnectStep: View {
 
     private var photoDetail: String {
         switch photoLink {
-        case .idle: return "Your recent photos show the places you love"
-        case .working: return "Reading your library…"
+        case .idle: return "Every photo you took"
+        case .working: return "Loading all your photos…"
         case .connected:
-            return usingSamples ? "Using \(photos.count) sample photos from SF" : "\(photos.count) recent photos ready"
+            let outdoor = scan.outdoor > 0 ? " · \(scan.outdoor) outdoors" : ""
+            return usingSamples ? "\(photos.count) sample photos\(outdoor)"
+                : "All \(scan.total.formatted()) photos loaded\(outdoor)"
         }
     }
 
-    private func letterBadge(_ letter: String, _ color: Color) -> some View {
-        Text(letter)
-            .font(.system(size: 20, weight: .heavy, design: .rounded))
-            .foregroundStyle(color)
-            .frame(width: 40, height: 40)
-            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func sourceRow(badge: AnyView, title: String, optional: Bool, link: Link, detail: String, action: @escaping () -> Void) -> some View {
+    private func sourceRow(logo: AnyView, title: String, link: Link, detail: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                badge
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(title).font(.system(size: 16, weight: .semibold))
-                        Text(optional ? "Optional" : "Recommended")
-                            .font(.system(size: 10, weight: .bold))
-                            .padding(.horizontal, 6)
-                            .frame(height: 18)
-                            .background(.white.opacity(optional ? 0.12 : 0.22), in: Capsule())
-                            .foregroundStyle(.white.opacity(optional ? 0.7 : 0.95))
-                    }
+            HStack(spacing: 14) {
+                logo
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.ink)
                     Text(detail)
                         .font(.system(size: 13))
-                        .foregroundStyle(link == .connected ? Color(hex: "#5ee39a") : .white.opacity(0.65))
-                        .lineLimit(2)
+                        .foregroundStyle(link == .connected ? Palette.success : Palette.muted)
+                        .lineLimit(1)
                         .contentTransition(.opacity)
                 }
                 Spacer(minLength: 8)
                 trailing(link)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 12)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(link != .idle)
+        .allowsHitTesting(link == .idle)
     }
 
     @ViewBuilder
@@ -287,17 +317,18 @@ struct OnboardingConnectStep: View {
         switch link {
         case .idle:
             Text("Connect")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Palette.ink)
                 .padding(.horizontal, 12)
                 .frame(height: 30)
                 .background(.white, in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
         case .working:
-            ProgressView().tint(.white).frame(width: 30, height: 30)
+            ProgressView().frame(width: 32, height: 32)
         case .connected:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Color(hex: "#34c759"))
+                .font(.system(size: 24))
+                .foregroundStyle(Palette.success)
                 .transition(.scale.combined(with: .opacity))
         }
     }
@@ -312,7 +343,7 @@ struct OnboardingConnectStep: View {
             let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
             var images: [UIImage] = []
             if status == .authorized || status == .limited {
-                images = await OnboardingPhotoLoader.recent(limit: 24)
+                images = await OnboardingPhotoLoader.recent(limit: 60)
             }
             if images.isEmpty {
                 // No access or nothing shared: let them pick a few by hand.
@@ -325,13 +356,18 @@ struct OnboardingConnectStep: View {
         }
     }
 
-    private func connectPhotos(_ images: [UIImage]) {
+    private func connectPhotos(_ images: [UIImage], total: Int? = nil) {
         usingSamples = false
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-            photos = images
-            photoLink = .connected
+        Task {
+            let all = max(total ?? OnboardingPhotoLoader.libraryCount(), images.count)
+            let outdoor = await OnboardingPhotoLoader.countOutdoor(images)
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                scan = PhotoScan(total: all, scanned: images.count, outdoor: outdoor)
+                photos = images
+                photoLink = .connected
+            }
+            Haptics.success()
         }
-        Haptics.success()
     }
 
     private func useSamples() {
@@ -340,7 +376,9 @@ struct OnboardingConnectStep: View {
             // A real pick landed meanwhile; it wins.
             guard picked.isEmpty else { return }
             usingSamples = true
+            let outdoor = await OnboardingPhotoLoader.countOutdoor(samples)
             withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                scan = PhotoScan(total: samples.count, scanned: samples.count, outdoor: outdoor, fromSamples: true)
                 photos = samples
                 photoLink = .connected
             }
@@ -366,7 +404,15 @@ struct OnboardingConnectStep: View {
         if photoLink == .connected && !usingSamples { sources.append("photos") }
         if google == .connected { sources.append("google") }
         if yelp == .connected { sources.append("yelp") }
-        store.update { s in s.connectedSources = sources }
+        let outdoorsy = scan.scanned >= 5 && scan.outdoorShare >= 0.3
+        store.update { s in
+            s.connectedSources = sources
+            // Lots of outdoor shots: nudge the taste toward parks and viewpoints.
+            if outdoorsy {
+                s.interests["outdoors"] = true
+                s.taste.weights["cat:park"] = max(s.taste.weights["cat:park"] ?? 0, 1.2)
+            }
+        }
         done()
     }
 
@@ -377,6 +423,7 @@ struct OnboardingConnectStep: View {
 struct OnboardingCompileStep: View {
     @Environment(AppStore.self) private var store
     var photos: [UIImage]
+    var scan: PhotoScan = PhotoScan()
     var done: () -> Void
 
     @State private var start: Date?
@@ -385,12 +432,16 @@ struct OnboardingCompileStep: View {
     @State private var bloom = false
 
     private let duration: Double = 4.8
-    private let lines = [
-        "Reading your photos…",
-        "Finding your favorite kinds of places…",
-        "Matching 2,400 places in San Francisco…",
-        "Cutting your gem…",
-    ]
+    private var lines: [String] {
+        let total = scan.total > 0 ? "all \(scan.total.formatted()) photos" : "your photos"
+        let outdoor = scan.outdoor > 0 ? "Found \(scan.outdoor) outdoor shots" : "Looking for outdoor shots…"
+        return [
+            "Loading \(total)…",
+            outdoor,
+            "Matching 2,400 places in San Francisco…",
+            "Shaping your gem…",
+        ]
+    }
 
     var body: some View {
         let gem = TasteGem.of(store)
@@ -578,14 +629,7 @@ struct OnboardingRevealStep: View {
                                 chip(trait, gem.colors[i % gem.colors.count])
                             }
                         }
-                        HStack(spacing: 6) {
-                            Image(systemName: "diamond.fill").font(.system(size: 11, weight: .bold))
-                            Text("Level \(gem.level) gem").font(.system(size: 13, weight: .bold))
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 26)
-                        .background(.white.opacity(0.14), in: Capsule())
-                        Text("Your gem decides what Odyssey shows you first. Save places and check in to grow it and bring out new colours.")
+                        Text("Your gem is your explorer personality. It shifts as you save places and check in, and it decides what Odyssey shows you first.")
                             .font(.system(size: 14))
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)
@@ -684,5 +728,27 @@ struct OnboardingRevealStep: View {
     private func article(_ word: String) -> String {
         guard let first = word.lowercased().first else { return "a" }
         return "aeiou".contains(first) ? "an" : "a"
+    }
+}
+
+/// The Photos app's pinwheel, drawn: eight soft petals in the rainbow.
+struct PhotosPinwheel: View {
+    private static let colors = ["#F5A623", "#F8D12E", "#A6D94C", "#4CC3A3", "#3FA3F0", "#7A6CF0", "#D45FD0", "#F25C54"]
+
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height)
+            ZStack {
+                ForEach(0..<8, id: \.self) { i in
+                    Capsule()
+                        .fill(Color(hex: Self.colors[i]).opacity(0.88))
+                        .frame(width: s * 0.3, height: s * 0.5)
+                        .offset(y: -s * 0.2)
+                        .rotationEffect(.degrees(Double(i) * 45))
+                        .blendMode(.multiply)
+                }
+            }
+            .frame(width: s, height: s)
+        }
     }
 }

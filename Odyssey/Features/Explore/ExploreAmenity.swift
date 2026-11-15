@@ -55,7 +55,7 @@ enum ExploreAmenity: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// A chip on the dark feed: glassy when off, white when on.
+/// A slim chip over the feed's photos: dark and quiet when off, white when on.
 struct ExploreGlassChip: View {
     var label: String
     var icon: String?
@@ -65,20 +65,15 @@ struct ExploreGlassChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                if let icon { Image(systemName: icon).font(.system(size: 12, weight: .bold)) }
-                Text(label).font(.system(size: 13, weight: .semibold))
-                if let trailing { Image(systemName: trailing).font(.system(size: 10, weight: .heavy)) }
+            HStack(spacing: 4) {
+                if let icon { Image(systemName: icon).font(.system(size: 10, weight: .semibold)) }
+                Text(label).font(.system(size: 12, weight: .semibold))
+                if let trailing { Image(systemName: trailing).font(.system(size: 9, weight: .bold)) }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
             .foregroundStyle(isOn ? Palette.ink : .white)
-            .background {
-                Capsule().fill(isOn ? Color.white : Color.black.opacity(0.32))
-            }
-            .overlay {
-                Capsule().strokeBorder(.white.opacity(isOn ? 0 : 0.22), lineWidth: 1)
-            }
+            .background(isOn ? Color.white : ExploreChrome.fill, in: Capsule())
         }
         .buttonStyle(PressStyle(scale: 0.94))
         .animation(.easeOut(duration: 0.16), value: isOn)
