@@ -68,6 +68,12 @@ export const bootstrap = mutation({
       km: 0,
       updatedAt: Date.now(),
     });
+    // New explorers start out friends with the demo explorers marked as friends,
+    // matching the friend list the app ships with.
+    const demo = (await ctx.db.query("profiles").collect()).filter((p) => p.demoId && p.extra?.friend);
+    for (const d of demo) {
+      await ctx.db.insert("friendships", { userId, friendKey: d.demoId!, status: "friends", createdAt: Date.now() });
+    }
     if (args.interests && args.interests.length > 0) {
       await ctx.scheduler.runAfter(0, internal.memory.rememberInterests, { userId, interests: args.interests });
     }
