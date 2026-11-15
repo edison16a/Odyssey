@@ -17,6 +17,7 @@ extension AppStore {
     func toggleStar(_ place: Place) -> Bool {
         let on = !isStarred(place)
         update { s in s.starred[place.id] = on ? place : nil }
+        Cloud.shared.recordStar(place, on: on)
         return on
     }
 

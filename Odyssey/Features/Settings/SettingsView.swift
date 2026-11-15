@@ -157,6 +157,7 @@ struct SettingsView: View {
         router.popToRoot()
         router.tab = .home
         store.update { $0.session.signedIn = false }
+        Task { await Cloud.shared.signOut() }
     }
 }
 

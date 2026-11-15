@@ -5,7 +5,7 @@
 //  One time code step. Six boxes fill as you type (one hidden field holds
 //  the code, so pasting and the keyboard's suggested code both work) and it
 //  verifies as soon as the last digit lands. "Paste code from Mail" fills it
-//  the way iOS offers a code from an incoming message. Any six digits pass.
+//  the way iOS offers a code from an incoming message. Convex Auth checks the code.
 //  Ported from features/auth/otp.js.
 //
 
@@ -25,7 +25,7 @@ struct AuthOTPStep: View {
     @FocusState private var focused: Bool
 
     enum Status { case idle, verifying, verified }
-    private let sentCode = "246810"
+    @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -42,14 +42,21 @@ struct AuthOTPStep: View {
             boxes
             statusLine
             HStack {
-                Button { fill(sentCode) } label: {
+                Button { fill(UIPasteboard.general.string ?? "") } label: {
                     Label("Paste code from Mail", systemImage: "envelope")
                 }
                 .foregroundStyle(.white.opacity(0.85))
                 Spacer()
                 Button(resendIn > 0 ? "Resend in 0:" + String(format: "%02d", resendIn) : "Resend code") {
-                    toast.show("New code sent", icon: "mail")
                     resendIn = 30
+                    Task {
+                        do {
+                            try await Cloud.shared.sendCode(email: email)
+                            toast.show("New code sent", icon: "mail")
+                        } catch {
+                            toast.show(error.localizedDescription, icon: "mail")
+                        }
+                    }
                 }
                 .foregroundStyle(.white.opacity(resendIn > 0 ? 0.4 : 0.85))
                 .disabled(resendIn > 0)
@@ -107,7 +114,7 @@ struct AuthOTPStep: View {
         HStack(spacing: 8) {
             switch status {
             case .idle:
-                EmptyView()
+                if let failure { Text(failure).foregroundStyle(Color(hex: "#ffb4a8")) }
             case .verifying:
                 ProgressView().tint(.white).controlSize(.small)
                 Text("Verifying")
@@ -128,9 +135,19 @@ struct AuthOTPStep: View {
     private func verify() {
         guard status == .idle else { return }
         focused = false
+        failure = nil
         status = .verifying
         Task {
-            try? await Task.sleep(for: .milliseconds(900))
+            do {
+                try await Cloud.shared.verify(email: email, code: code)
+            } catch {
+                status = .idle
+                failure = error.localizedDescription
+                code = ""
+                Haptics.warning()
+                focused = true
+                return
+            }
             status = .verified
             Haptics.success()
             try? await Task.sleep(for: .milliseconds(600))

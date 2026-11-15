@@ -34,6 +34,7 @@ struct OdysseyApp: App {
                 .tint(Palette.ink)
                 .onAppear {
                     location.attach(store)
+                    Cloud.shared.attach(store)
                     WidgetBridge.publish(from: store)
                 }
                 .onOpenURL { router.open($0, store: store) }

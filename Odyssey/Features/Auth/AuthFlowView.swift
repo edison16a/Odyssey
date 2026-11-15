@@ -15,6 +15,7 @@ struct AuthFlowView: View {
     enum Step { case landing, email, otp }
 
     @Environment(AppStore.self) private var store
+    @Environment(ToastCenter.self) private var toast
 
     @State private var step: Step = .landing
     @State private var returning = false
@@ -31,7 +32,7 @@ struct AuthFlowView: View {
                         skip: skipToOnboarding
                     )
                 case .email:
-                    AuthEmailStep(email: $email, returning: returning, back: { go(.landing) }, send: { go(.otp) })
+                    AuthEmailStep(email: $email, returning: returning, back: { go(.landing) }, send: sendCode)
                 case .otp:
                     AuthOTPStep(email: email, back: { go(.email) })
                 }
@@ -44,6 +45,19 @@ struct AuthFlowView: View {
     private func skipToOnboarding() {
         Haptics.tap()
         store.update { s in s.session.signedIn = true }
+    }
+
+    /// Ask Convex Auth to email a one-time code, then show the code step.
+    private func sendCode() {
+        let address = email
+        Task {
+            do {
+                try await Cloud.shared.sendCode(email: address)
+                go(.otp)
+            } catch {
+                toast.show(error.localizedDescription, icon: "mail")
+            }
+        }
     }
 
     private func go(_ next: Step) {

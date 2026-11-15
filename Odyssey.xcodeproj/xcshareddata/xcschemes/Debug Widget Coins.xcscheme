@@ -61,21 +61,21 @@
          runnableDebuggingMode = "2"
          BundleIdentifier = "com.apple.springboard">
          <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "633B8FE7309D066F00AE36FF"
-               BuildableName = "OdysseyWidgetsExtension.appex"
-               BlueprintName = "OdysseyWidgetsExtension"
-               ReferencedContainer = "container:Odyssey.xcodeproj">
-            </BuildableReference>
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "633B8FE7309D066F00AE36FF"
+            BuildableName = "OdysseyWidgetsExtension.appex"
+            BlueprintName = "OdysseyWidgetsExtension"
+            ReferencedContainer = "container:Odyssey.xcodeproj">
+         </BuildableReference>
       </RemoteRunnable>
       <MacroExpansion>
          <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "633B8FA8309D066D00AE36FF"
-               BuildableName = "Odyssey.app"
-               BlueprintName = "Odyssey"
-               ReferencedContainer = "container:Odyssey.xcodeproj">
-            </BuildableReference>
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "633B8FA8309D066D00AE36FF"
+            BuildableName = "Odyssey.app"
+            BlueprintName = "Odyssey"
+            ReferencedContainer = "container:Odyssey.xcodeproj">
+         </BuildableReference>
       </MacroExpansion>
       <EnvironmentVariables>
          <EnvironmentVariable
@@ -107,12 +107,12 @@
          runnableDebuggingMode = "2"
          BundleIdentifier = "com.apple.springboard">
          <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "633B8FE7309D066F00AE36FF"
-               BuildableName = "OdysseyWidgetsExtension.appex"
-               BlueprintName = "OdysseyWidgetsExtension"
-               ReferencedContainer = "container:Odyssey.xcodeproj">
-            </BuildableReference>
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "633B8FE7309D066F00AE36FF"
+            BuildableName = "OdysseyWidgetsExtension.appex"
+            BlueprintName = "OdysseyWidgetsExtension"
+            ReferencedContainer = "container:Odyssey.xcodeproj">
+         </BuildableReference>
       </RemoteRunnable>
    </ProfileAction>
    <AnalyzeAction

@@ -11,3 +11,8 @@ build/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# Node / Convex
+node_modules/
+.env.local
+.env
