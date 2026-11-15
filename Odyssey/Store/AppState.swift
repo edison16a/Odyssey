@@ -114,6 +114,12 @@ nonisolated struct AppState: Codable, Sendable {
     var questsDone: [String: String] = [:]
     /// Today's Quests on Home: task id -> the day its reward was paid.
     var dailyTasks: [String: String] = [:]
+    /// Deals claimed through Whop (mocked): deal id to the discount code.
+    var claimedDeals: [String: String] = [:]
+    /// Sources connected in onboarding: "photos", "google", "yelp".
+    var connectedSources: [String] = []
+    /// One-time tips already shown, e.g. "explore-feed".
+    var tipsSeen: [String] = []
     var myPosts: [Post] = []
     var friends: [String] = []
     var requests: [String] = []
@@ -174,7 +180,7 @@ nonisolated struct AppState: Codable, Sendable {
              checkins, videos, firsts, taste, placeInsights, discoverLocation, discoverCategory, savedPlaces, questInvites,
              questsDone, myPosts, friends, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
              useDeviceLocation, myBounties, bountyProgress, seasonDone, travelTrails, travelCountries, travelStates,
-             footprints, trackInBackground, starred, recommended, demoMode, dailyTasks
+             footprints, trackInBackground, starred, recommended, demoMode, dailyTasks, claimedDeals, connectedSources, tipsSeen
     }
 
     init(from decoder: Decoder) throws {
@@ -206,6 +212,9 @@ nonisolated struct AppState: Codable, Sendable {
         questInvites = value(.questInvites, d.questInvites)
         questsDone = value(.questsDone, d.questsDone)
         dailyTasks = value(.dailyTasks, d.dailyTasks)
+        claimedDeals = value(.claimedDeals, d.claimedDeals)
+        connectedSources = value(.connectedSources, d.connectedSources)
+        tipsSeen = value(.tipsSeen, d.tipsSeen)
         myPosts = value(.myPosts, d.myPosts)
         friends = value(.friends, d.friends)
         requests = value(.requests, d.requests)
