@@ -3,6 +3,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./lib";
+import { expiryFor, isBountyActive } from "./bountyRules";
 
 export const createPost = mutation({
   args: {
@@ -142,22 +143,30 @@ export const bounties = query({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db.query("bounties").collect();
-    return rows.filter((b) => b.active).map((b) => ({ ...b.data, _owner: b.ownerId ?? null }));
+    return rows.filter((b) => isBountyActive(b, Date.now())).map((b) => ({
+      ...b.data, active: b.active, expiresAt: b.expiresAt ?? b.data.expiresAt ?? expiryFor(b.data, b.createdAt), _owner: b.ownerId ?? null,
+    }));
+  },
+});
+
+/** Canonical owner history also refreshes expiry on bounties saved by older app versions. */
+export const myBounties = query({
+  args: {},
+  handler: async (ctx) => {
+    const ownerId = await requireUser(ctx);
+    const rows = await ctx.db.query("bounties").withIndex("by_owner", (q) => q.eq("ownerId", ownerId)).collect();
+    return rows.map((b) => ({
+      ...b.data, mine: true, active: b.active,
+      expiresAt: b.expiresAt ?? b.data.expiresAt ?? expiryFor(b.data, b.createdAt),
+    }));
   },
 });
 
 export const postBounty = mutation({
   args: { bounty: v.any() },
   handler: async (ctx, { bounty }) => {
-    const userId = await requireUser(ctx);
-    const bountyId = String(bounty?.id ?? `b-${Date.now()}`);
-    const row = await ctx.db.query("bounties").withIndex("by_bountyId", (q) => q.eq("bountyId", bountyId)).unique();
-    if (row) {
-      if (row.ownerId !== userId) throw new Error("Not your bounty");
-      await ctx.db.patch(row._id, { data: bounty });
-      return row._id;
-    }
-    return await ctx.db.insert("bounties", { ownerId: userId, bountyId, data: bounty, active: true, createdAt: Date.now() });
+    await requireUser(ctx);
+    throw new Error("Fund your bounty through whop:createBountyCheckout. Only verified payments can publish bounties.");
   },
 });
 

@@ -46,15 +46,19 @@ enum WorldPlaces {
 
         async let osm = NearbyService.fetchLive(center: center, store: store)
         async let apple = searchApple(center: center)
-        let fromOSM = await osm ?? []
         let fromApple = await apple
-        guard !fromOSM.isEmpty || !fromApple.isEmpty else { return }
-        loaded.insert(key)
+        // Show Apple's pins immediately; an unavailable Overpass mirror can take much longer.
+        register(fromApple, center: center, store: store)
+        let fromOSM = await osm ?? []
+        register(fromOSM, center: center, store: store)
+        if !fromOSM.isEmpty || !fromApple.isEmpty { loaded.insert(key) }
+    }
 
+    @MainActor
+    private static func register(_ batch: [OSMRaw], center: Coord, store: AppStore) {
         var all = store.osmPlaces
-        // Only nearby places can be duplicates, which keeps this quick as the world fills in.
-        var kept = all.values.filter { $0.coords.distance(to: center) < 2500 }
-        for raw in fromOSM + merge(fromApple, against: fromOSM) {
+        var kept = store.seed.places + all.values.filter { $0.coords.distance(to: center) < 2500 }
+        for raw in batch {
             let place = NearbyService.normalize(raw, store: store, register: false)
             if all[place.id] == nil, !duplicate(place, in: kept) {
                 all[place.id] = place
@@ -62,15 +66,6 @@ enum WorldPlaces {
             }
         }
         store.osmPlaces = all
-    }
-
-    /// Apple places that OpenStreetMap does not already have.
-    private static func merge(_ apple: [OSMRaw], against osm: [OSMRaw]) -> [OSMRaw] {
-        apple.filter { a in
-            !osm.contains { o in
-                Coord(o.lat, o.lng).distance(to: Coord(a.lat, a.lng)) < 60 && sameName(o.name, a.name)
-            }
-        }
     }
 
     private static func duplicate(_ place: Place, in list: [Place]) -> Bool {
@@ -141,5 +136,5 @@ extension MKPointOfInterestCategory {
 
 extension Place {
     /// True for places found through Apple Maps, which asks for a credit line.
-    var fromAppleMaps: Bool { tags?["source"] == "apple" }
+    var fromAppleMaps: Bool { source == "apple" || tags?["source"] == "apple" }
 }

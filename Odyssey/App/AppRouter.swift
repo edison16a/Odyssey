@@ -13,12 +13,12 @@ import Observation
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Hashable {
-    case home, friends, explore, profile
+    case home, worldMap, explore, profile
 
     var title: String {
         switch self {
         case .home: return "Home"
-        case .friends: return "Friends"
+        case .worldMap: return "World Map"
         case .explore: return "Explore"
         case .profile: return "Profile"
         }
@@ -27,7 +27,7 @@ enum AppTab: String, CaseIterable, Hashable {
     var icon: String {
         switch self {
         case .home: return "house"
-        case .friends: return "person.2"
+        case .worldMap: return "globe.americas"
         case .explore: return "safari"
         case .profile: return "person"
         }
@@ -54,6 +54,7 @@ enum Route: Hashable {
     case firsts
     case history
     case settings
+    case friends
     case friendsMap
     case business
     case demoGuide
@@ -68,7 +69,7 @@ enum Cover: Identifiable, Hashable {
     case dayShare
     case powerUp(days: Int)
     case bountyWizard
-    case setBounty(placeID: String)
+    case setBounty(placeID: String?)
     case globe
     case exploredMap(focus: String?)
     case countryScene
@@ -84,7 +85,7 @@ enum Cover: Identifiable, Hashable {
         case .dayShare: return "day"
         case .powerUp(let days): return "power-\(days)"
         case .bountyWizard: return "bounty-new"
-        case .setBounty(let id): return "set-bounty-\(id)"
+        case .setBounty(let id): return "set-bounty-\(id ?? "new")"
         case .globe: return "globe"
         case .exploredMap(let focus): return "explored-\(focus ?? "")"
         case .countryScene: return "country"
@@ -99,6 +100,8 @@ final class AppRouter {
     var tab: AppTab = .home
     var paths: [AppTab: [Route]] = [:]
     var cover: Cover?
+    /// Consumed by World Map when opening an older travel-map link.
+    var worldMapFocus: String?
     /// Set by the odyssey://bounty-paid/<id> link Whop's checkout hands back to.
     var paidBountyID: String?
     /// Bumped when a tab is tapped while open, so it can scroll to the top.
@@ -134,7 +137,18 @@ final class AppRouter {
     }
 
     func present(_ next: Cover) {
+        if case .exploredMap(let focus) = next {
+            openWorldMap(focus: focus)
+            return
+        }
         cover = next
+    }
+
+    func openWorldMap(focus: String? = nil) {
+        cover = nil
+        worldMapFocus = focus
+        paths[.worldMap] = []
+        tab = .worldMap
     }
 
     func dismissCover() { cover = nil }
@@ -172,9 +186,12 @@ final class AppRouter {
         case "explore":
             tab = .explore
             paths[.explore] = []
+        case "map", "world-map":
+            tab = .worldMap
+            paths[.worldMap] = []
         case "friends":
-            tab = .friends
-            paths[.friends] = []
+            tab = .home
+            paths[.home] = [.friends]
         case "quests":
             tab = .home
             paths[.home] = [.quests]

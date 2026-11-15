@@ -17,6 +17,7 @@ final class AppStore {
     let seed = Seed.shared
 
     /// OpenStreetMap places seen this session, so a place page can open them by id.
+    var worldMap = WorldMapState()
     var osmPlaces: [String: Place] = [:]
     /// Demo amenity tags by place id (wifi, seating, bathroom...), from Convex.
     var placeFeatures: [String: [String]] = [:]
@@ -26,6 +27,7 @@ final class AppStore {
     var deals: [String: [Deal]] = [:]
     /// Bounties every explorer has paid for and pushed live, from Convex.
     var liveBounties: [Bounty] = []
+    var bountyRevision = 0
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?
