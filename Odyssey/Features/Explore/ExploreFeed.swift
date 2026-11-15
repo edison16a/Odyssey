@@ -85,9 +85,13 @@ final class ExploreFeed {
         growing = true
         defer { growing = false }
         while remaining < Self.batch {
-            let fresh = candidates(store)
+            let open = candidates(store)
+            // Places with real photos go first; photo-less map places only once those run out.
+            let real = open.filter { !$0.realGallery.isEmpty }
+            let fresh = real.isEmpty ? open : real
             if !fresh.isEmpty {
-                let next = Array(await store.rankForYouOnline(fresh).filter { !dealt.contains($0.id) }.prefix(Self.batch))
+                let ranked = await store.rankForYouOnline(fresh).filter { !dealt.contains($0.id) }
+                let next = Array(store.tasteMix(ranked, after: cards).prefix(Self.batch))
                 if next.isEmpty { dealt.formUnion(fresh.map(\.id)); continue }
                 dealt.formUnion(next.map(\.id))
                 cards += next
@@ -111,25 +115,28 @@ final class ExploreFeed {
     }
 
     private func candidates(_ store: AppStore) -> [Place] {
-        let open = pool.values.filter { !dealt.contains($0.id) }
+        // A map place matched to an Odyssey place is the same spot: show the Odyssey one, with its photos.
+        let open = pool.values.filter { place in
+            !dealt.contains(place.id) && !(place.curated.map { pool[$0] != nil || dealt.contains($0) } ?? false)
+        }
         switch filter {
         case .all: return open
         case .beFirst: return open.filter { store.status(of: $0).status == .new }
-        case .close: return open.filter { store.metres(to: $0) <= 900 }
+        case .close: return open.filter { store.exploreMetres(to: $0) <= 900 }
         case .category(let id): return open.filter { ($0.cats ?? store.tasteCategories($0)).contains(id) }
         case .search(let q):
             let hits = open.filter { Self.matches($0, q) }
             // Nothing by name nearby: after a ring of looking, show the category instead.
             if !hits.isEmpty || ring < 1 || (ring == 1 && !tiles.isEmpty) { return hits }
             broadened = true
-            return open.filter { !Set(q.cats).isDisjoint(with: $0.cats ?? []) }
+            return open.filter { !Set(q.cats).isDisjoint(with: $0.cats ?? store.tasteCategories($0)) }
         }
     }
 
     /// The query's words in the name or tags, so "ramen" finds ramen shops.
     static func matches(_ place: Place, _ q: ExploreQuery) -> Bool {
         let t = place.tags ?? [:]
-        let hay = ([place.name] + ["cuisine", "shop", "amenity", "leisure", "sport", "tourism", "craft"].compactMap { t[$0] }
+        let hay = ([place.name, place.category ?? ""] + ["cuisine", "shop", "amenity", "leisure", "sport", "tourism", "craft"].compactMap { t[$0] }
                    + (place.cats ?? [])).joined(separator: " ").lowercased().replacingOccurrences(of: "_", with: " ")
         return q.words.contains { word in
             let w = word.lowercased()
@@ -147,12 +154,29 @@ final class ExploreFeed {
         return offsets.map { Coord(center.lat + lat * $0.0, center.lng + lng * $0.1) }
     }
 
-    /// World places within the rings loaded so far join the pool.
+    /// Odyssey's own places and the world places within the rings loaded so far join the pool.
     private func absorbWorld(_ store: AppStore) {
         let center = store.exploreCenter
         let reach = Self.ringStep * Double(ring + 1) + 400
+        for place in store.seed.places where pool[place.id] == nil && place.coords.distance(to: center) < reach {
+            pool[place.id] = place
+        }
         for place in store.osmPlaces.values where pool[place.id] == nil && place.coords.distance(to: center) < reach {
             pool[place.id] = place
         }
+    }
+}
+
+extension Place {
+    /// Photos that really show this place. A stock photo picked for its category does not count,
+    /// so the card shows the plain dark fallback instead of passing it off as the place.
+    var realGallery: [String] { photoKind == "category" ? [] : gallery }
+}
+
+extension AppStore {
+    /// Distance on an Explore card: from you, or from the Explore location when that is closer,
+    /// so Odyssey's own places in a picked area read in walking minutes like the map places do.
+    func exploreMetres(to place: Place) -> Double {
+        min(metres(to: place), exploreCenter.distance(to: place.coords))
     }
 }

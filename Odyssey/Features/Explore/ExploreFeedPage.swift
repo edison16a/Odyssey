@@ -5,7 +5,8 @@
 //  One screen of the Explore feed: the place's photo edge to edge, its
 //  name, how far it is and why Odyssey picked it, what it has (wifi, a
 //  bathroom...), any Whop deal, and a small action rail on the right.
-//  Double tap anywhere to save it.
+//  Double tap anywhere to save it. With several photos, tap the right or
+//  left third to step through them, like stories.
 //
 
 import Foundation
@@ -19,14 +20,22 @@ struct ExploreFeedPage: View {
     var onNotForMe: () -> Void
     var onDirections: () -> Void
     var onDetails: () -> Void
+    /// Where the Explore top bar ends, so the photo progress bars sit just under it.
+    var topInset: CGFloat = 0
 
     @State private var hearts: [HeartBurst] = []
+    /// Which photo of the gallery is showing.
+    @State private var shown = 0
+    @State private var width: CGFloat = 0
 
     /// Room kept clear on the right of the text for the rail.
     private static let railWidth: CGFloat = 64
 
+    /// Only photos of this very place; a category stock photo is left out.
+    private var gallery: [String] { place.realGallery }
+
     var body: some View {
-        let metres = store.metres(to: place)
+        let metres = store.exploreMetres(to: place)
         ZStack(alignment: .bottomLeading) {
             photo
             LinearGradient(stops: [.init(color: .clear, location: 0.5),
@@ -44,6 +53,13 @@ struct ExploreFeedPage: View {
                         hearts.removeAll { $0.id == heart.id }
                     }
                 }
+                .onTapGesture(count: 1, coordinateSpace: .local) { point in flip(at: point) }
+            if gallery.count > 1 {
+                progress
+                    .padding(.top, topInset + Space.s2)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
+            }
             info(metres)
                 .allowsHitTesting(false)
             ForEach(hearts) { heart in
@@ -54,16 +70,46 @@ struct ExploreFeedPage: View {
         }
         .overlay(alignment: .bottomTrailing) { rail }
         .clipped()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onChange(of: place.id) { shown = 0 }
     }
 
-    /// The photo, over a plain dark fallback for places without one.
+    /// Tap the left third for the previous photo, the right third for the next.
+    private func flip(at point: CGPoint) {
+        let count = gallery.count
+        guard count > 1, width > 0 else { return }
+        let step: Int
+        if point.x < width / 3 { step = -1 } else if point.x > width * 2 / 3 { step = 1 } else { return }
+        let next = shown + step
+        guard next >= 0, next < count else { Haptics.tap(); return }
+        shown = next
+    }
+
+    /// Thin story style bars, one per photo, the current one and those before it filled.
+    private var progress: some View {
+        HStack(spacing: 4) {
+            ForEach(gallery.indices, id: \.self) { i in
+                Capsule()
+                    .fill(.white.opacity(i <= shown ? 0.95 : 0.35))
+                    .frame(height: 2.5)
+            }
+        }
+        .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+        .padding(.horizontal, Space.s4)
+        .animation(.easeOut(duration: 0.15), value: shown)
+    }
+
+    /// The photo, over a plain dark fallback for places without a real one.
     private var photo: some View {
-        ZStack {
+        let list = gallery
+        return ZStack {
             Palette.ink
             Image(systemName: Icon.symbol(store.placeKind(place).icon))
                 .font(.system(size: 72, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.08))
-            PhotoView(path: place.photo, placeholder: .clear)
+            if !list.isEmpty {
+                PhotoView(path: list[min(shown, list.count - 1)], placeholder: .clear)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
