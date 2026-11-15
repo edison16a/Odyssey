@@ -4,7 +4,9 @@
 //
 //  The first run after signing in: a welcome, five quick questions that
 //  seed what Odyssey thinks you will love, an honest ask for your location,
-//  then the opening moment that hands off to the app. The same backdrop
+//  then connecting photos (and optionally Google and Yelp), watching your
+//  taste gem get cut from them, meeting your first adventure, and the
+//  opening moment that hands off to the app. The same backdrop
 //  as sign in keeps playing underneath.
 //  Ported from features/onboarding/welcome.js and question.js.
 //
@@ -13,11 +15,13 @@ import Foundation
 import SwiftUI
 
 struct OnboardingFlowView: View {
-    enum Step: Equatable { case welcome, question(Int), location, opening }
+    enum Step: Equatable { case welcome, question(Int), location, connect, compile, reveal, opening }
 
     @Environment(AppStore.self) private var store
     @State private var step: Step = .welcome
     @State private var answers: [String: Bool] = [:]
+    /// Thumbnails from the photo library (or bundled place photos) that feed the gem animation.
+    @State private var photos: [UIImage] = []
 
     var body: some View {
         ZStack {
@@ -34,7 +38,13 @@ struct OnboardingFlowView: View {
                     )
                     .id(index)
                 case .location:
-                    OnboardingLocationStep(done: { go(.opening) })
+                    OnboardingLocationStep(done: { go(.connect) })
+                case .connect:
+                    OnboardingConnectStep(photos: $photos, done: { go(.compile) })
+                case .compile:
+                    OnboardingCompileStep(photos: photos, done: { go(.reveal) })
+                case .reveal:
+                    OnboardingRevealStep(done: { go(.opening) })
                 case .opening:
                     OnboardingOpeningStep()
                 }
