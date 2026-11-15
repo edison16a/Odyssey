@@ -20,8 +20,9 @@ Settings (environment variables):
     CONVEX_URL        the deployment to work for
     SCAN_WORKER_KEY   must match the key on the deployment
     SCAN_FPS          frames per second taken from the video (default 6)
-    SCAN_STEPS        training steps (default 7000; more is sharper and slower)
+    SCAN_STEPS        training steps (default 10000; more is sharper and slower)
     SCAN_MAX_SPLATS   splats sent to the phone (default 300000)
+    SCAN_REMOVE_PEOPLE  set to 1 to leave people out of the 3D space (default: keep them)
 """
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, threading, time, traceback
 import urllib.request
@@ -30,8 +31,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONVEX_URL = os.environ.get("CONVEX_URL", "https://valiant-jay-880.convex.cloud").rstrip("/")
 KEY = os.environ.get("SCAN_WORKER_KEY", "odyssey-scan-worker")
 FPS = float(os.environ.get("SCAN_FPS", "6"))
-STEPS = int(os.environ.get("SCAN_STEPS", "7000"))
+STEPS = int(os.environ.get("SCAN_STEPS", "10000"))
 MAX_SPLATS = int(os.environ.get("SCAN_MAX_SPLATS", "300000"))
+# People are always ignored when working out where the camera was (they move, the room does not).
+# Leaving them out of the 3D space as well is optional: it leaves smudges where they stood.
+REMOVE_PEOPLE = os.environ.get("SCAN_REMOVE_PEOPLE", "0") == "1"
 CACHE = os.path.expanduser("~/.odyssey-scan")
 BRUSH_URL = "https://github.com/ArthurBrussee/brush/releases/download/v0.3.0/brush-app-aarch64-apple-darwin.tar.xz"
 
@@ -154,7 +158,7 @@ def build(video, work, say):
     if r.returncode != 0 or frames < 20:
         raise ScanError("The video was too short to build a space from. Record at least 20 seconds.")
 
-    say("Removing people from the scene", 0.12)
+    say("Removing people from the scene" if REMOVE_PEOPLE else "Finding the people so the camera can ignore them", 0.12)
     colmap_masks, brush_masks = os.path.join(work, "colmap_masks"), os.path.join(work, "ds", "masks")
     os.makedirs(os.path.join(work, "ds"))
     have_masks = run([masks_bin(), images, colmap_masks, brush_masks], log).returncode == 0
@@ -217,7 +221,7 @@ def build(video, work, say):
     os.symlink(images, os.path.join(ds, "images"))
     for name in ("cameras.bin", "images.bin", "points3D.bin"):
         shutil.copy(os.path.join(best, name), os.path.join(ds, "sparse", "0", name))
-    if not have_masks:
+    if not have_masks or not REMOVE_PEOPLE:
         shutil.rmtree(brush_masks, ignore_errors=True)
 
     out = os.path.join(work, "out")
@@ -263,6 +267,10 @@ def build(video, work, say):
     if r.returncode != 0:
         raise ScanError("Could not pack the 3D space for the phone.")
     meta = open(os.path.join(phone, "meta.json")).read()
+    # Keep the trained splat and the cameras, so a scan can be repacked later without training again.
+    keep = os.path.join(CACHE, "scans", os.path.basename(work))
+    shutil.copytree(txt, os.path.join(keep, "txt"))
+    shutil.copy(final, os.path.join(keep, "splat.ply"))
     return os.path.join(phone, "model.bin"), meta, json.loads(meta)["count"]
 
 

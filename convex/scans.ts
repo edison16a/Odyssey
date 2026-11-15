@@ -185,6 +185,31 @@ export const fail = mutation({
   },
 });
 
+/** Build a scan again from its video. The old one stays available until the new one is ready. */
+export const rerender = mutation({
+  args: { key: v.string(), id: v.id("scans") },
+  handler: async (ctx, { key, id }) => {
+    checkWorker(key);
+    const old = await ctx.db.get(id);
+    if (!old) throw new Error("Scan not found");
+    const now = Date.now();
+    return await ctx.db.insert("scans", {
+      userId: old.userId,
+      placeId: old.placeId,
+      placeName: old.placeName,
+      lat: old.lat,
+      lng: old.lng,
+      videoId: old.videoId,
+      seconds: old.seconds,
+      status: "queued",
+      message: "Waiting for a render computer",
+      progress: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
 /** Put a failed scan back in the queue. */
 export const retry = mutation({
   args: { key: v.string(), id: v.id("scans") },

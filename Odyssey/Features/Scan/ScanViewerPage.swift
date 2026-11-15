@@ -295,7 +295,7 @@ const keymap = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', d: 'r', a
 window.addEventListener('keydown', e => { const k = keymap[e.key.toLowerCase()]; if (k) { keys2.add(k); used(); e.preventDefault(); } });
 window.addEventListener('keyup', e => { const k = keymap[e.key.toLowerCase()]; if (k) keys2.delete(k); });
 
-const REACH = 5;      // metres you may stray from the walked path
+const REACH = 2.5;    // metres you may stray from the walked path; further out the scan falls apart
 const SPEED = 1.5;    // metres per second at full stick
 let last = performance.now(), slow = 0;
 function tick(now) {
