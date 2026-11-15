@@ -16,25 +16,21 @@ struct ExploreCoachMarks: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.72).ignoresSafeArea()
-            VStack(spacing: 28) {
+            Color.black.opacity(0.7).ignoresSafeArea()
+            VStack(spacing: Space.s8) {
                 Spacer()
                 hand
-                VStack(alignment: .leading, spacing: 18) {
-                    row("arrow.up", "Swipe up to pass")
-                    row("heart.fill", "Double tap or \u{2665} to save — your gem grows", tint: Color(hex: "#ff5f7e"))
+                VStack(alignment: .leading, spacing: Space.s4) {
+                    row("arrow.up", "Swipe up for the next place")
+                    row("heart", "Double tap or tap the heart to save")
                     row("line.3.horizontal.decrease", "Filter for wifi, bathrooms and more")
                 }
-                .padding(.horizontal, Space.s6)
+                .padding(.horizontal, Space.s8)
                 .opacity(shown ? 1 : 0)
-                .offset(y: shown ? 0 : 16)
+                .offset(y: shown ? 0 : 12)
                 Text("Tap anywhere to start")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 18)
-                    .frame(height: 40)
-                    .background(.white, in: Capsule())
-                    .padding(.top, 6)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
                 Spacer()
                 Spacer()
             }
@@ -46,40 +42,31 @@ struct ExploreCoachMarks: View {
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.4).delay(0.15)) { shown = true }
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: false)) { swipe = true }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false)) { swipe = true }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
 
     private var hand: some View {
-        ZStack {
-            Capsule()
-                .fill(LinearGradient(colors: [.white.opacity(0), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom))
-                .frame(width: 10, height: 90)
-                .offset(y: swipe ? -10 : 40)
-                .opacity(swipe ? 0 : 0.9)
-            Image(systemName: "hand.point.up.left.fill")
-                .font(.system(size: 58))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
-                .offset(x: 14, y: swipe ? -50 : 50)
-                .opacity(swipe ? 0.15 : 1)
-        }
-        .frame(height: 170)
+        Image(systemName: "hand.point.up.left.fill")
+            .font(.system(size: 44))
+            .foregroundStyle(.white)
+            .offset(x: 10, y: swipe ? -36 : 36)
+            .opacity(swipe ? 0 : 1)
+            .frame(height: 120)
     }
 
-    private func row(_ icon: String, _ text: String, tint: Color = .white) -> some View {
-        HStack(spacing: 14) {
+    private func row(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: Space.s3) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 40, height: 40)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 34, height: 34)
                 .background(.white.opacity(0.14), in: Circle())
             Text(text)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
+                .font(.system(size: 15, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .foregroundStyle(.white)
     }
 }

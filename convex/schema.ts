@@ -334,4 +334,50 @@ export default defineSchema({
     day: v.string(),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // ── 3D scans ─────────────────────────────────────────────────────────
+  // A walkthrough video and the 3D space a render worker builds from it.
+  scans: defineTable({
+    userId: v.optional(v.id("users")),
+    placeId: v.string(),
+    placeName: v.string(),
+    name: v.optional(v.string()), // what the explorer called this space: "Main hall", "Kitchen"
+    creatorName: v.optional(v.string()),
+    // Scans are made without signing in, so the phone that made one proves it with a private key.
+    // Only that phone may delete the scan. Never sent back to other phones.
+    ownerKey: v.optional(v.string()),
+    replaces: v.optional(v.id("scans")), // a re-render: the older scan goes when this one is ready
+    lat: v.number(),
+    lng: v.number(),
+    videoId: v.id("_storage"),
+    seconds: v.number(),
+    status: v.string(), // "queued", "processing", "ready" or "failed"
+    message: v.string(), // what is happening right now, shown on the phone
+    progress: v.number(), // 0 to 1
+    worker: v.optional(v.string()),
+    modelId: v.optional(v.id("_storage")), // the splat file the phone renders
+    meta: v.optional(v.string()), // JSON: up direction and the recorded path
+    splats: v.optional(v.number()),
+    // What the video shows of the building: stairs, doors, seating... Read from a few frames by Claude.
+    frames: v.optional(v.array(v.object({ frame: v.number(), storageId: v.id("_storage") }))),
+    analysis: v.optional(v.string()), // "pending", "done" or "failed"
+    summary: v.optional(v.string()),
+    features: v.optional(
+      v.array(
+        v.object({
+          kind: v.string(), // "stairs", "elevator", "restroom"...
+          label: v.string(),
+          detail: v.string(),
+          wheelchair: v.string(), // "barrier", "helps" or "neutral"
+          certainty: v.string(), // "seen" (clearly in the video) or "likely"
+          frame: v.number(), // the video frame it shows best in, which places it in the 3D space
+        }),
+      ),
+    ),
+    access: v.optional(v.object({ wheelchair: v.string(), reason: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_place", ["placeId"])
+    .index("by_status", ["status"]),
 });

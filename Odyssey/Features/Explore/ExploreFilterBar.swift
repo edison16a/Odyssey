@@ -101,9 +101,9 @@ struct ExploreSearchBar: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 46)
-        .background(Palette.surface2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                 .strokeBorder(focused.wrappedValue ? Palette.ink.opacity(0.85) : .clear, lineWidth: 1.5)
         }
         .animation(.easeOut(duration: 0.15), value: focused.wrappedValue)
@@ -140,8 +140,8 @@ struct ExploreSuggestions: View {
                     .padding(14)
             }
         }
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
     }
 
     private func highlighted(_ text: String) -> Text {

@@ -37,7 +37,8 @@ final class CameraModel {
     var isAvailable: Bool { CameraModel.hasCamera }
 
     /// Ask for camera (and microphone, for video) access, then start the preview.
-    func start(side: Side = .back, video: Bool = false) async {
+    /// `ultraWide` asks for the 0.5x camera, which 3D scans track far better (more of the room in every frame).
+    func start(side: Side = .back, video: Bool = false, ultraWide: Bool = false) async {
         guard isAvailable else { return }
         wanted = true
         var granted = await AVCaptureDevice.requestAccess(for: .video)
@@ -49,7 +50,7 @@ final class CameraModel {
         }
         guard wanted else { return }
         self.side = side
-        await engine.configure(position: side == .back ? .back : .front, video: video)
+        await engine.configure(position: side == .back ? .back : .front, video: video, ultraWide: ultraWide)
         // The screen closed while the session was starting: turn it straight back off.
         guard wanted else {
             engine.stop()
@@ -105,14 +106,15 @@ nonisolated final class CameraEngine: NSObject, @unchecked Sendable {
     private var photoContinuation: CheckedContinuation<UIImage?, Never>?
     private var movieContinuation: CheckedContinuation<URL?, Never>?
 
-    func configure(position: AVCaptureDevice.Position, video: Bool) async {
+    func configure(position: AVCaptureDevice.Position, video: Bool, ultraWide: Bool = false) async {
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             queue.async {
                 self.session.beginConfiguration()
                 self.session.sessionPreset = video ? .high : .photo
                 self.session.inputs.forEach { self.session.removeInput($0) }
                 self.session.outputs.forEach { self.session.removeOutput($0) }
-                if let device = Self.device(position), let input = try? AVCaptureDeviceInput(device: device),
+                let wide = ultraWide ? AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: position) : nil
+                if let device = wide ?? Self.device(position), let input = try? AVCaptureDeviceInput(device: device),
                    self.session.canAddInput(input) {
                     self.session.addInput(input)
                     self.input = input

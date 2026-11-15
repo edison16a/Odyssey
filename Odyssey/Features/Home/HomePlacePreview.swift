@@ -47,6 +47,7 @@ struct HomePlacePreview: View {
                 // "Nobody has been here" would contradict a list of contributors.
                 if !(info.status == .new && (contributors?.total ?? 0) > 0) { status(info) }
                 bountyCallout
+                ScanPlaceRow(place: place, before: { dismiss() })
                 HStack(spacing: 8) {
                     Button {
                         dismiss()
