@@ -23,7 +23,7 @@ struct HomePlacePreview: View {
     @State private var history: PlaceHistory?
 
     var body: some View {
-        let meters = store.metres(to: place)
+        let meters = store.here.distance(to: place.coords)
         let kind = store.placeKind(place)
         let info = store.status(of: place)
         ScrollView(showsIndicators: false) {
@@ -35,12 +35,19 @@ struct HomePlacePreview: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name).font(.system(size: 20, weight: .bold)).tracking(-0.3).foregroundStyle(Palette.ink).lineLimit(2)
-                        Text([kind.label, Format.distance(meters), Format.walkTime(meters)].joined(separator: ", "))
+                        Text(store.usingRealLocation ? [kind.label, Format.distance(meters), Format.walkTime(meters)].joined(separator: ", ") : kind.label)
                             .font(.system(size: 13))
                             .foregroundStyle(Palette.muted)
                     }
                     Spacer(minLength: 0)
                     ThumbsView(place: place)
+                }
+                if let address = place.address, !address.isEmpty {
+                    Text(address).font(.subheadline).foregroundStyle(Palette.muted)
+                }
+                PlaceAmenityDetails(place: place)
+                if place.fromAppleMaps {
+                    Text("Place data from Apple Maps").font(.caption2).foregroundStyle(Palette.muted)
                 }
                 PlaceDealsSection(place: place)
                 contributorList
@@ -71,7 +78,7 @@ struct HomePlacePreview: View {
                     let id = place.id
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.present(.setBounty(placeID: id)) }
                 } label: {
-                    Label("Set bounty", systemImage: "dollarsign.circle.fill").frame(maxWidth: .infinity)
+                    Label("Set Bounty for This Location", systemImage: "dollarsign.circle.fill").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.pill(.primary))
                 Button("See place details") {

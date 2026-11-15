@@ -33,7 +33,7 @@ struct HomeTab: View {
                     HomeAdventureHero()
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
-                    HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
+                    HomeExploredMapCard()
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
                     HomeRecommendations(onPick: { preview = $0 }, part: .loved)
@@ -104,15 +104,14 @@ struct HomeRewardsHeader: View {
         let rank = store.rank()
         VStack(alignment: .leading, spacing: 14) {
             HStack {
+                IconButton(icon: "users", kind: .white, label: "Friends") { router.push(.friends) }
+                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") { router.push(.notifications) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(greeting).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
                     Text(store.state.user.name.split(separator: " ").first.map(String.init) ?? "Explorer")
                         .font(.system(size: 26, weight: .heavy)).tracking(-0.6).foregroundStyle(Palette.ink)
                 }
                 Spacer()
-                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") {
-                    router.push(.notifications)
-                }
             }
             HStack(spacing: 8) {
                 pill(action: { router.push(.shop(nil)) }) {
@@ -362,7 +361,7 @@ struct HomeRecommendations: View {
             }
             if part == .more, !friends.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    SectionHeader(title: "Adventures Your Friends Completed", link: "Friends") { router.select(.friends) }
+                    SectionHeader(title: "Adventures Your Friends Completed", link: "Friends") { router.push(.friends) }
                         .padding(.horizontal, 20)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 12) {
@@ -470,57 +469,24 @@ struct HomeRecCard: View {
 // MARK: The 3D explored map
 
 struct HomeExploredMapCard: View {
-    @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
-    @Environment(ToastCenter.self) private var toast
-    var onPick: (Place) -> Void
-    var onBounty: (Bounty) -> Void
-    @State private var position: MapCameraPosition = .automatic
-    @State private var zoom = 14
-    @State private var centered = false
-    /// Amenity kinds switched on over the map.
-    @State private var amenities: Set<String> = []
-    @State private var amenityOpen: AmenityPoint?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "World Map", link: "Open map") { router.present(.exploredMap(focus: nil)) }
-            ZStack(alignment: .bottomLeading) {
-                HomeMapView(position: $position, zoom: $zoom, filter: "all", onPick: onPick, onBounty: onBounty,
-                            amenities: amenities, onAmenity: { point in
-                                Haptics.tap()
-                                amenityOpen = point
-                            })
-                VStack(alignment: .leading, spacing: 8) {
-                    HomeAmenityChips(kinds: $amenities)
-                        .padding(.top, 10)
-                    Spacer()
-                    HStack {
-                        HomeFootprintChip()
-                        Spacer()
-                        HomeMapLegend()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Your World in 3D")
+            WorldMapView(isPreview: true)
+                .frame(height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+                .overlay(RoundedRectangle(cornerRadius: Radius.lg).strokeBorder(Palette.line))
+            Button { router.openWorldMap() } label: {
+                Label("Open Map", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .foregroundStyle(.white)
+                    .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16))
             }
-            .frame(height: 440)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
-        }
-        .onAppear {
-            guard !centered else { return }
-            centered = true
-            let center = store.demoFocus ?? (store.usingRealLocation ? store.here : store.home.center)
-            // Tilted so the explored buildings stand up in 3D.
-            position = .camera(MapCamera(centerCoordinate: center.location, distance: 1500, heading: 20, pitch: 62))
-        }
-        .sheet(item: $amenityOpen) { point in
-            AmenitySheet(point: point)
-                .presentationDetents([.height(330)])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(28)
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("home.openWorldMap")
         }
     }
-
 }

@@ -265,6 +265,15 @@ export default defineSchema({
     data: v.any(),
     active: v.boolean(),
     createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    durationDays: v.optional(v.number()),
+    maxExplorers: v.optional(v.number()),
+    targetType: v.optional(v.union(v.literal("place"), v.literal("street"), v.literal("city"), v.literal("area"))),
+    center: v.optional(coord),
+    radius: v.optional(v.number()),
+    pool: v.optional(v.number()),
+    platformFee: v.optional(v.number()),
+    totalAmount: v.optional(v.number()),
   })
     .index("by_bountyId", ["bountyId"])
     .index("by_owner", ["ownerId"]),
@@ -280,15 +289,30 @@ export default defineSchema({
     paymentId: v.optional(v.string()),
     createdAt: v.number(),
     paidAt: v.optional(v.number()),
+    requestId: v.optional(v.string()),
+    checkoutUrl: v.optional(v.string()),
+    accountId: v.optional(v.string()),
+    sandbox: v.optional(v.boolean()),
+    durationDays: v.optional(v.number()),
+    maxExplorers: v.optional(v.number()),
+    targetType: v.optional(v.union(v.literal("place"), v.literal("street"), v.literal("city"), v.literal("area"))),
+    center: v.optional(coord),
+    radius: v.optional(v.number()),
+    pool: v.optional(v.number()),
+    platformFee: v.optional(v.number()),
+    totalAmount: v.optional(v.number()),
   })
     .index("by_bountyId", ["bountyId"])
-    .index("by_checkoutId", ["checkoutId"]),
+    .index("by_checkoutId", ["checkoutId"])
+    .index("by_owner_request", ["ownerId", "requestId"])
+    .index("by_paymentId", ["paymentId"]),
 
   /** Whop webhook deliveries already handled (Whop may send one more than once). */
   whopEvents: defineTable({ webhookId: v.string(), type: v.string(), at: v.number() }).index("by_webhookId", ["webhookId"]),
 
   /** Public amenities on the map: bathrooms, elevators, water, free wifi (demo seed). */
   amenities: defineTable({
+    verified: v.optional(v.boolean()),
     kind: v.string(), // "bathroom" | "elevator" | "water" | "wifi"
     name: v.string(),
     lat: v.number(),

@@ -44,7 +44,7 @@ struct BountySheet: View {
                     }
                     facts(b)
                     actions(b)
-                    Text("Paid in bounty cash when your walkthrough is approved. Check in, then record a short video inside. Bounty cash turns into gift cards dollar for dollar.")
+                    Text("This is a funded exploration opportunity. Estimated reward shares are not a payout guarantee. Contribution verification and actual explorer payouts are not yet available. Obtain permission before recording in a private business.")
                         .font(.system(size: 12))
                         .foregroundStyle(Palette.muted)
                 }
@@ -66,7 +66,7 @@ struct BountySheet: View {
                     .font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
             Spacer()
-            Tag(text: "Bounty", icon: "dollar", tone: .gold)
+            Tag(text: b.isFunded ? "Funded Bounty" : "Demo Bounty", icon: "dollar", tone: .gold)
         }
     }
 
@@ -98,8 +98,8 @@ struct BountySheet: View {
 
     private func facts(_ b: Bounty) -> some View {
         HStack(spacing: 16) {
-            Label("\(b.days) days left", systemImage: "clock")
-            Label("\(b.videos - b.recorded) walkthroughs to go", systemImage: "video")
+            Label("\(b.daysRemaining) days left", systemImage: "clock")
+            Label("Up to \(b.maxExplorers ?? b.videos) explorers", systemImage: "person.2")
         }
         .font(.system(size: 13))
         .foregroundStyle(Palette.muted)
@@ -129,7 +129,7 @@ struct BountySheet: View {
     /// with the fewest walkthroughs, closest first.
     static func nextPlace(_ b: Bounty, store: AppStore) -> Place? {
         if b.target.kind == "place", let id = b.target.placeId { return store.place(id) }
-        let inside = store.seed.places.filter { b.center.distance(to: $0.coords) <= b.radius }
+        let inside = (store.seed.places + Array(store.osmPlaces.values)).filter { b.center.distance(to: $0.coords) <= b.radius }
         return inside.min { a, c in
             let va = store.videoCount(a), vc = store.videoCount(c)
             if va != vc { return va < vc }

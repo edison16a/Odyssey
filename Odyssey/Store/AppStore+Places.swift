@@ -15,6 +15,7 @@ extension AppStore {
     /// A curated place, an OpenStreetMap place seen this session, or one saved by a check-in.
     func place(_ id: String) -> Place? {
         seed.places.first { $0.id == id } ?? osmPlaces[id] ?? state.savedPlaces[id] ?? state.starred[id]
+            ?? (liveBounties + state.myBounties).compactMap(\.target.place).first { $0.id == id }
     }
 
     /// Label and icon for any place.

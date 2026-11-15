@@ -79,7 +79,7 @@ struct ProfileHeader: View {
     private func stats(_ me: Person) -> some View {
         let city = store.standings().first
         return HStack(spacing: 0) {
-            stat(Format.compact(store.state.stats.friends), "Friends") { router.select(.friends) }
+            stat(Format.compact(store.state.stats.friends), "Friends") { router.push(.friends) }
             divider
             stat("\(me.explored)", "Explored", action: onPlaces)
             divider

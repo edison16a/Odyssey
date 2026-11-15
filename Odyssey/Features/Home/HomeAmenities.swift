@@ -74,7 +74,7 @@ extension HomeMapWorld {
     static func amenityPins(store: AppStore, box: HomeMapBox?, zoom: Int, kinds: Set<String>) -> [HomeAmenityPin] {
         guard !kinds.isEmpty, zoom >= 11 else { return [] }
         let center = box?.center ?? store.here
-        let inView = store.amenityPoints.filter { kinds.contains($0.kind) && (box?.contains($0.coord) ?? true) }
+        let inView = store.amenityPoints.filter { kinds.contains($0.kind) && ($0.verified || store.state.demoMode) && (box?.contains($0.coord) ?? true) }
         let nearest = inView
             .map { ($0, $0.coord.distance(to: center)) }
             .sorted { $0.1 < $1.1 }
@@ -92,7 +92,7 @@ extension HomeMapWorld {
     @MainActor
     static func nearest(_ kind: String, store: AppStore) -> AmenityPoint? {
         let here = store.here
-        return store.amenityPoints.filter { $0.kind == kind }.min { $0.coord.distance(to: here) < $1.coord.distance(to: here) }
+        return store.amenityPoints.filter { $0.kind == kind && $0.verified }.min { $0.coord.distance(to: here) < $1.coord.distance(to: here) }
     }
 }
 
@@ -194,10 +194,15 @@ struct AmenitySheet: View {
                 }
                 Spacer(minLength: 0)
             }
+            if !point.verified {
+                Text("Demo amenity · sample data").font(.caption.bold()).foregroundStyle(Palette.muted)
+            }
             HStack(spacing: 6) {
-                accessTag(isPublic)
-                Tag(text: Format.distance(meters), icon: "mappin.and.ellipse")
-                Tag(text: Format.walkTime(meters), icon: "figure.walk")
+                if ["public", "customers"].contains(point.access) { accessTag(isPublic) }
+                if store.usingRealLocation {
+                    Tag(text: Format.distance(meters), icon: "mappin.and.ellipse")
+                    Tag(text: Format.walkTime(meters), icon: "figure.walk")
+                }
             }
             if !point.note.isEmpty {
                 Text(point.note)
