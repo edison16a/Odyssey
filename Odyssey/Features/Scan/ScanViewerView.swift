@@ -356,30 +356,33 @@ struct PlaceInsideCard: View {
 
     var body: some View {
         let access = scans.access(for: place.id)
-        let features = scans.features(for: place.id)
+        let features = scans.features(for: place.id).map(\.feature)
+        let getting = features.filter(\.isAccess)
+        let amenities = features.filter { !$0.isAccess }
         if access != nil || !features.isEmpty || scans.isReading(place.id) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Inside this place").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
-                if let access { banner(access) }
+                if access != nil || !getting.isEmpty {
+                    group("Getting in and around", getting) {
+                        if let access { banner(access) }
+                    }
+                }
                 if scans.isReading(place.id) {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
                         Text("Looking through a video for stairs, doors and other features").font(.system(size: 13)).foregroundStyle(Palette.muted)
                     }
                 }
-                if !features.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array((showAll ? features : Array(features.prefix(4))).enumerated()), id: \.offset) { _, item in
-                            row(item.feature)
-                        }
+                if !amenities.isEmpty {
+                    if access != nil || !getting.isEmpty { Divider() }
+                    group("Good to have", amenities) { EmptyView() }
+                }
+                if getting.count > 3 || amenities.count > 3 {
+                    Button(showAll ? "Show fewer" : "Show all \(features.count) features") {
+                        withAnimation(.easeInOut(duration: 0.25)) { showAll.toggle() }
                     }
-                    if features.count > 4 {
-                        Button(showAll ? "Show fewer" : "Show all \(features.count) features") {
-                            withAnimation(.easeInOut(duration: 0.25)) { showAll.toggle() }
-                        }
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Palette.accentInk)
-                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.accentInk)
                 }
                 Text("From explorers' videos, read by AI. Not checked by a person.")
                     .font(.system(size: 11))
@@ -388,6 +391,19 @@ struct PlaceInsideCard: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        }
+    }
+
+    private func group(_ title: String, _ features: [ScanFeature], @ViewBuilder lead: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(Palette.muted)
+            lead()
+            ForEach(Array((showAll ? features : Array(features.prefix(3))).enumerated()), id: \.offset) { _, feature in
+                row(feature)
+            }
         }
     }
 
