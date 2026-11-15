@@ -82,7 +82,7 @@ The **adventure Live Activity** starts when you head to a place. It counts the d
 
 A scan goes phone, Convex, render computer, Convex, phone. Nothing talks to the phone directly.
 
-1. **Phone.** `Odyssey/Features/Scan` records with the 0.5x camera (or takes a video from the library), shrinks it to 720p, uploads it to Convex storage and creates a row in `scans`.
+1. **Phone.** `Odyssey/Features/Scan` records with the 0.5x camera (or takes a video from the library), re-encodes it as 1080p HEVC, uploads it to Convex storage and creates a row in `scans`.
 2. **Convex.** `convex/scans.ts` holds the queue and each scan's status, message and progress.
 3. **Render computer.** `tools/scan-worker/worker.py` runs on a Mac with Apple silicon. It claims the next scan, takes 6 frames a second from the video, masks out people (Apple Vision), solves the camera path (COLMAP), trains a Gaussian splat (Brush), levels the floor and uploads a 10 MB model. A 90 second video takes about 15 minutes.
 4. **Phone.** The place shows "Walk around in 3D". The model is downloaded once and drawn by a small WebGL page inside the app.

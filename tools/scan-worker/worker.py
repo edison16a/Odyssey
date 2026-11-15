@@ -146,7 +146,7 @@ def build(video, work, say):
     os.makedirs(images)
 
     say("Picking frames from your video", 0.06)
-    # Videos from the app are 720p; anything bigger is scaled so the long side is 1600.
+    # Videos from the app are 1080p; anything bigger is scaled so the long side is 1600.
     scale = "scale='if(gt(iw,ih),min(1600,iw),-2)':'if(gt(iw,ih),-2,min(1600,ih))'"
     r = run([need("ffmpeg"), "-v", "error", "-y", "-i", video, "-vf", f"fps={FPS},{scale}", "-q:v", "2",
              os.path.join(images, "f_%04d.jpg")], log)
@@ -161,7 +161,6 @@ def build(video, work, say):
 
     colmap = need("colmap")
     db, sparse = os.path.join(work, "database.db"), os.path.join(work, "sparse")
-    os.makedirs(sparse)
     say(f"Finding landmarks in {frames} frames", 0.18)
     extract = [colmap, "feature_extractor", "--database_path", db, "--image_path", images,
                "--ImageReader.single_camera", "1", "--ImageReader.camera_model", "SIMPLE_PINHOLE",
@@ -173,22 +172,51 @@ def build(video, work, say):
 
     say("Matching landmarks between frames", 0.26)
     run([colmap, "sequential_matcher", "--database_path", db, "--FeatureMatching.use_gpu", "0",
-         "--SequentialMatching.overlap", "20", "--SequentialMatching.loop_detection", "1"], log)
+         "--FeatureMatching.guided_matching", "1", "--SequentialMatching.overlap", "30",
+         "--SequentialMatching.loop_detection", "1"], log)
+
+    def solve(out_dir):
+        """Place the frames. Forgiving settings, so a blurry stretch does not cut the walk in two."""
+        os.makedirs(out_dir)
+        run([colmap, "mapper", "--database_path", db, "--image_path", images, "--output_path", out_dir,
+             "--Mapper.ba_refine_principal_point", "0", "--Mapper.abs_pose_min_num_inliers", "12",
+             "--Mapper.abs_pose_min_inlier_ratio", "0.12", "--Mapper.max_reg_trials", "6"], log)
+        return sorted(((registered(os.path.join(out_dir, d)), d) for d in os.listdir(out_dir)), reverse=True)
 
     say("Working out where the camera was", 0.34)
-    run([colmap, "mapper", "--database_path", db, "--image_path", images, "--output_path", sparse,
-         "--Mapper.ba_refine_principal_point", "0"], log)
-    models = sorted(((registered(os.path.join(sparse, d)), d) for d in os.listdir(sparse)), reverse=True)
+    models = solve(sparse)
+    if models and models[0][0] < 0.7 * frames:
+        # The solve has some luck in it. When it lost a large part of the walk, a second go often keeps it.
+        say("Working out where the camera was, second pass", 0.39)
+        again_dir = os.path.join(work, "sparse_again")
+        again = solve(again_dir)
+        if again and again[0][0] > models[0][0]:
+            models, sparse = again, again_dir
     if not models or models[0][0] < 15:
         raise ScanError("Could not follow the camera through this video. Move slower and avoid quick turns.")
-    placed, best = models[0]
-    print(f"  placed {placed} of {frames} frames ({len(models)} piece{'s' if len(models) > 1 else ''})", flush=True)
+    placed, best = models[0][0], os.path.join(sparse, models[0][1])
+    # A hard moment in the video splits the walk into pieces. Pieces that share frames can be joined.
+    joined = False
+    for count, name in models[1:]:
+        if count < 15:
+            continue
+        merged = os.path.join(sparse, f"joined_{name}")
+        os.makedirs(merged)
+        r = run([colmap, "model_merger", "--input_path1", best, "--input_path2", os.path.join(sparse, name),
+                 "--output_path", merged], log)
+        if r.returncode == 0 and registered(merged) > placed:
+            placed, best, joined = registered(merged), merged, True
+    if joined:
+        say("Joining the parts of your walk", 0.42)
+        run([colmap, "bundle_adjuster", "--input_path", best, "--output_path", best], log)
+    print(f"  placed {placed} of {frames} frames ({len(models)} piece{'s' if len(models) > 1 else ''}"
+          f"{', joined' if joined else ''})", flush=True)
 
     ds = os.path.join(work, "ds")
     os.makedirs(os.path.join(ds, "sparse", "0"))
     os.symlink(images, os.path.join(ds, "images"))
     for name in ("cameras.bin", "images.bin", "points3D.bin"):
-        shutil.copy(os.path.join(sparse, best, name), os.path.join(ds, "sparse", "0", name))
+        shutil.copy(os.path.join(best, name), os.path.join(ds, "sparse", "0", name))
     if not have_masks:
         shutil.rmtree(brush_masks, ignore_errors=True)
 

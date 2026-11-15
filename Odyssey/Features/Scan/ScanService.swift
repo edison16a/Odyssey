@@ -138,7 +138,7 @@ final class ScanService {
 
     // MARK: Sending a video
 
-    /// Shrink the video, upload it and queue the scan. `step` reports what is happening and how far along it is.
+    /// Re-encode the video, upload it and queue the scan. `step` reports what is happening and how far along it is.
     func submit(video: URL, place: Place, step: @escaping (String, Double) -> Void) async throws -> String {
         let asset = AVURLAsset(url: video)
         let seconds = (try? await asset.load(.duration).seconds) ?? 0
@@ -175,9 +175,10 @@ final class ScanService {
         return id
     }
 
-    /// 720p is plenty for the 3D build and a fraction of the upload.
+    /// Full HD in HEVC: the 3D build tracks the camera by fine detail, so it needs the pixels, and HEVC
+    /// keeps the upload around half the size of the original.
     private func compress(_ asset: AVURLAsset) async -> URL? {
-        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { return nil }
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHEVC1920x1080) else { return nil }
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("scan-\(UUID().uuidString).mp4")
         do {
             try await export.export(to: out, as: .mp4)
