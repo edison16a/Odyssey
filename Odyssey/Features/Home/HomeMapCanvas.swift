@@ -24,6 +24,8 @@ nonisolated struct HomePin: Identifiable, Equatable, Sendable {
     var kind: Kind
     var glyph: String
     var pulses: Bool
+    /// Show the place name next to the pin.
+    var label = false
 }
 
 /// Everything on the map at one moment.
@@ -80,7 +82,7 @@ struct HomeMapCanvas: View, Equatable {
             }
             BountyMapContent(bounties: scene.bounties, onPick: onBounty)
             ForEach(scene.pins) { pin in
-                Annotation(pin.name, coordinate: pin.coord.location, anchor: pin.kind == .star ? .bottom : .center) {
+                Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
                     HomePinView(pin: pin)
                         .onTapGesture { onPin(pin.placeID) }
                 }

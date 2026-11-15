@@ -188,3 +188,29 @@ export const forPlace = query({
     };
   },
 });
+
+/** Everyone who has contributed to a place, most walkthroughs first. */
+export const contributors = query({
+  args: { placeId: v.string() },
+  handler: async (ctx, { placeId }) => {
+    const rows = await ctx.db.query("contributions").withIndex("by_place", (q) => q.eq("placeId", placeId)).collect();
+    const byUser = new Map<string, { count: number; seconds: number; lastAt: number; summary: string | null }>();
+    for (const r of rows) {
+      const cur = byUser.get(r.userId) ?? { count: 0, seconds: 0, lastAt: 0, summary: null };
+      cur.count++;
+      cur.seconds += r.seconds;
+      if (r.createdAt > cur.lastAt) {
+        cur.lastAt = r.createdAt;
+        cur.summary = r.insights?.summary ?? cur.summary;
+      }
+      byUser.set(r.userId, cur);
+    }
+    const out = [];
+    for (const [userId, stats] of byUser) {
+      const p = await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", userId as Id<"users">)).unique();
+      out.push({ name: p?.name ?? "Explorer", demoId: p?.demoId ?? null, ...stats });
+    }
+    out.sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
+    return { total: rows.length, people: out };
+  },
+});

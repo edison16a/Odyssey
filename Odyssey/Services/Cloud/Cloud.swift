@@ -287,6 +287,22 @@ final class Cloud {
                             explorers: (d["explorers"] as? NSNumber)?.intValue ?? 0, recent: recent)
     }
 
+    /// Everyone who contributed to a place, most walkthroughs first.
+    func placeContributors(_ placeID: String) async -> PlaceContributors? {
+        guard let d = try? await api.query("history:contributors", ["placeId": placeID]) as? [String: Any] else { return nil }
+        let people = (d["people"] as? [[String: Any]] ?? []).map { r in
+            PlaceContributors.Person(
+                name: r["name"] as? String ?? "Explorer",
+                personID: r["demoId"] as? String,
+                count: (r["count"] as? NSNumber)?.intValue ?? 0,
+                seconds: (r["seconds"] as? NSNumber)?.intValue ?? 0,
+                summary: r["summary"] as? String,
+                lastAt: Date(timeIntervalSince1970: ((r["lastAt"] as? NSNumber)?.doubleValue ?? 0) / 1000)
+            )
+        }
+        return PlaceContributors(total: (d["total"] as? NSNumber)?.intValue ?? 0, people: people)
+    }
+
     func recordFriend(_ id: String, status: String) {
         guard signedIn else { return }
         send("social:setFriend", ["friendKey": id, "status": status])
@@ -418,4 +434,19 @@ struct PlaceHistory: Equatable {
 
     /// Explorers per day mapped to the five graph shades.
     var levels: [Int] { days.map { $0 == 0 ? 0 : min(4, $0) } }
+}
+
+/// What `history:contributors` returns.
+struct PlaceContributors: Equatable {
+    struct Person: Equatable, Identifiable {
+        var id: String { (personID ?? name) + "\(lastAt.timeIntervalSince1970)" }
+        var name: String
+        var personID: String?
+        var count: Int
+        var seconds: Int
+        var summary: String?
+        var lastAt: Date
+    }
+    var total: Int
+    var people: [Person]
 }
