@@ -20,6 +20,7 @@ struct HomePlacePreview: View {
 
     @State private var contributors: PlaceContributors?
     @State private var loaded = false
+    @State private var history: PlaceHistory?
 
     var body: some View {
         let meters = store.metres(to: place)
@@ -41,8 +42,10 @@ struct HomePlacePreview: View {
                     Spacer(minLength: 0)
                     ThumbsView(place: place)
                 }
+                PlaceDealsSection(place: place)
                 contributorList
-                status(info)
+                // "Nobody has been here" would contradict a list of contributors.
+                if !(info.status == .new && (contributors?.total ?? 0) > 0) { status(info) }
                 bountyCallout
                 ScanPlaceRow(place: place, before: { dismiss() })
                 HStack(spacing: 8) {
@@ -63,6 +66,14 @@ struct HomePlacePreview: View {
                     }
                     .buttonStyle(.pill(.primary))
                 }
+                Button {
+                    dismiss()
+                    let id = place.id
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.present(.setBounty(placeID: id)) }
+                } label: {
+                    Label("Set bounty", systemImage: "dollarsign.circle.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pill(.primary))
                 Button("See place details") {
                     dismiss()
                     let id = place.id
@@ -77,12 +88,14 @@ struct HomePlacePreview: View {
             .padding(.bottom, 16)
         }
         .task(id: place.id) {
-            let next = await Cloud.shared.placeContributors(place.id)
-            withAnimation(.easeOut(duration: 0.2)) { contributors = next; loaded = true }
+            async let people = Cloud.shared.placeContributors(place.id)
+            async let graph = Cloud.shared.placeHistory(place.id)
+            let (next, days) = await (people, graph)
+            withAnimation(.easeOut(duration: 0.2)) { contributors = next; history = days; loaded = true }
         }
     }
 
-    /// Everyone who recorded a walkthrough here, most walkthroughs first.
+    /// The first explorer, the top three as a podium, and the daily contribution graph.
     @ViewBuilder private var contributorList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -94,13 +107,8 @@ struct HomePlacePreview: View {
                 }
             }
             if let people = contributors?.people, !people.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
-                        contributorRow(person, rank: index + 1)
-                        if index < people.count - 1 { Divider().padding(.leading, 64) }
-                    }
-                }
-                .card(padding: 12)
+                if let first = contributors?.first { firstContributor(first) }
+                podium(Array(people.prefix(3)))
             } else if loaded {
                 Text("No one has recorded this place yet. Be the first contributor.")
                     .font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -109,35 +117,96 @@ struct HomePlacePreview: View {
             } else {
                 ProgressView().frame(maxWidth: .infinity).padding(.vertical, 18)
             }
+            if loaded, (contributors?.total ?? 0) > 0 {
+                PlaceActivityGrid(place: place, history: history).padding(.top, 6)
+            }
         }
     }
 
-    private func contributorRow(_ item: PlaceContributors.Person, rank: Int) -> some View {
-        let person = item.personID.flatMap { store.person($0) } ?? (item.name == store.me.name ? store.me : nil)
-        return Button {
-            guard let person else { return }
-            dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.push(.person(person.id)) }
-        } label: {
-            HStack(spacing: 10) {
-                Text("\(rank)").font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.muted).frame(width: 14)
-                if let person {
-                    AvatarView(person: person, size: 38, frame: "none")
-                } else {
-                    Circle().fill(Palette.surface3).frame(width: 38, height: 38)
+    private func lookup(_ personID: String?, name: String) -> Person? {
+        personID.flatMap { store.person($0) } ?? (name == store.me.name ? store.me : nil)
+    }
+
+    private func open(_ person: Person?) {
+        guard let person else { return }
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.push(.person(person.id)) }
+    }
+
+    /// Who explored the place before anyone else.
+    private func firstContributor(_ first: PlaceContributors.First) -> some View {
+        let person = lookup(first.personID, name: first.name)
+        return Button { open(person) } label: {
+            HStack(spacing: 12) {
+                ZStack(alignment: .topTrailing) {
+                    if let person {
+                        AvatarView(person: person, size: 42, frame: "none")
+                    } else {
+                        Circle().fill(Palette.surface3).frame(width: 42, height: 42)
+                    }
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(4)
+                        .background(Palette.gold, in: Circle())
+                        .offset(x: 6, y: -6)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name).font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ink)
-                    Text(item.summary ?? "Recorded a walkthrough")
-                        .font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(1)
+                    Text("First contributor").font(.system(size: 11, weight: .bold)).foregroundStyle(Color(hex: "#5c3d00")).textCase(.uppercase)
+                    Text(first.name).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
+                    Text("Explored it first on \(first.at.formatted(.dateTime.month(.abbreviated).day().year()))")
+                        .font(.system(size: 12)).foregroundStyle(Palette.muted)
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(item.count)").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.accentInk)
-                    Text(item.count == 1 ? "video" : "videos").font(.system(size: 10)).foregroundStyle(Palette.muted)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.goldSoft, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        }
+        .buttonStyle(PressStyle())
+    }
+
+    /// Second on the left, first in the middle, third on the right.
+    private func podium(_ top: [PlaceContributors.Person]) -> some View {
+        let slots: [(rank: Int, height: CGFloat, color: Color)] = [
+            (2, 54, Color(hex: "#c7ccd6")), (1, 78, Palette.gold), (3, 40, Color(hex: "#d9a273")),
+        ]
+        return HStack(alignment: .bottom, spacing: 8) {
+            ForEach(slots, id: \.rank) { slot in
+                if slot.rank <= top.count {
+                    podiumColumn(top[slot.rank - 1], rank: slot.rank, height: slot.height, color: slot.color)
+                } else {
+                    Color.clear.frame(maxWidth: .infinity, minHeight: slot.height)
                 }
             }
-            .padding(.vertical, 8)
+        }
+        .padding(.top, 4)
+    }
+
+    private func podiumColumn(_ item: PlaceContributors.Person, rank: Int, height: CGFloat, color: Color) -> some View {
+        let person = lookup(item.personID, name: item.name)
+        let size: CGFloat = rank == 1 ? 56 : 46
+        return Button { open(person) } label: {
+            VStack(spacing: 6) {
+                if let person {
+                    AvatarView(person: person, size: size, frame: "none")
+                } else {
+                    Circle().fill(Palette.surface3).frame(width: size, height: size)
+                }
+                VStack(spacing: 1) {
+                    Text(item.name.components(separatedBy: " ").first ?? item.name)
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text("\(item.count) \(item.count == 1 ? "video" : "videos")")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+                }
+                Text("\(rank)")
+                    .font(.system(size: rank == 1 ? 26 : 20, weight: .heavy))
+                    .foregroundStyle(rank == 1 ? Palette.ink : .white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+                    .background(color, in: UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12, style: .continuous))
+            }
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }

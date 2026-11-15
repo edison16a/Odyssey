@@ -18,6 +18,14 @@ final class AppStore {
 
     /// OpenStreetMap places seen this session, so a place page can open them by id.
     var osmPlaces: [String: Place] = [:]
+    /// Demo amenity tags by place id (wifi, seating, bathroom...), from Convex.
+    var placeFeatures: [String: [String]] = [:]
+    /// Public bathrooms, elevators, water and wifi for the map, from Convex.
+    var amenityPoints: [AmenityPoint] = []
+    /// Whop deals by place id, from Convex.
+    var deals: [String: [Deal]] = [:]
+    /// Bounties every explorer has paid for and pushed live, from Convex.
+    var liveBounties: [Bounty] = []
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?

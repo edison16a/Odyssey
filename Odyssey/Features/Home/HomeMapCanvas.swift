@@ -37,6 +37,10 @@ struct HomeMapScene {
     var labels: [HomeExploredLayer.Region] = []
     var bounties: [Bounty] = []
     var pins: [HomePin] = []
+    /// Bathrooms, elevators, water and wifi, when their chips are on.
+    var amenities: [HomeAmenityPin] = []
+    /// Fade the place pins while amenities are showing, so those stand out.
+    var dimsPins = false
     var showsUser = false
     var me = Coord(0, 0)
 }
@@ -48,6 +52,7 @@ struct HomeMapCanvas: View, Equatable {
     var onCamera: (MKCoordinateRegion) -> Void
     var onPin: (String) -> Void
     var onBounty: (Bounty) -> Void
+    var onAmenity: (String) -> Void = { _ in }
 
     nonisolated static func == (a: HomeMapCanvas, b: HomeMapCanvas) -> Bool {
         MainActor.assumeIsolated { a.revision == b.revision && a.position == b.position }
@@ -84,7 +89,15 @@ struct HomeMapCanvas: View, Equatable {
             ForEach(scene.pins) { pin in
                 Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
                     HomePinView(pin: pin)
+                        .opacity(scene.dimsPins ? 0.4 : 1)
                         .onTapGesture { onPin(pin.placeID) }
+                }
+                .annotationTitles(.hidden)
+            }
+            ForEach(scene.amenities) { pin in
+                Annotation(pin.name, coordinate: pin.coord.location, anchor: .center) {
+                    HomeAmenityPinView(pin: pin)
+                        .onTapGesture { onAmenity(pin.id) }
                 }
                 .annotationTitles(.hidden)
             }

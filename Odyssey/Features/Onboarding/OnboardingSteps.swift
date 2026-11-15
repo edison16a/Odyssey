@@ -2,7 +2,7 @@
 //  OnboardingSteps.swift
 //  Odyssey
 //
-//  The last two onboarding steps. First an honest card about location:
+//  The location and closing onboarding steps. First an honest card about location:
 //  what Odyssey uses it for and what it never does, with the system prompt
 //  behind one button. Then the opening moment from the mockup: a short
 //  checklist runs while the mark grows, and the app takes over.
@@ -76,7 +76,7 @@ struct OnboardingOpeningStep: View {
     @State private var bounce = false
     @State private var leaving = false
 
-    private let lines = ["Learning what you love", "Finding places near you nobody has explored", "Setting up your first quests"]
+    private let lines = ["Saving your taste gem", "Pinning your first adventure", "Setting up today's quests"]
 
     var body: some View {
         VStack(spacing: 18) {

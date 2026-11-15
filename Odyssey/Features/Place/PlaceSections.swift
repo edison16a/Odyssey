@@ -22,6 +22,9 @@ struct PlaceSectionsStack: View {
             if let quest = store.seed.quests.first(where: { $0.placeId == place.id && store.state.questsDone[$0.id] == nil }) {
                 section { PlaceQuestBanner(quest: quest) }
             }
+            if !(store.deals[place.id] ?? []).isEmpty {
+                section { PlaceDealsSection(place: place) }
+            }
             section { PlaceFirstExplorerCard(place: place) }
             section { PlaceFriendsCard(place: place) }
             section { PlaceWalkthroughCard(place: place, total: history?.total) }

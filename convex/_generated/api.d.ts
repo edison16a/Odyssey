@@ -10,7 +10,9 @@
 
 import type * as admin from "../admin.js";
 import type * as adventures from "../adventures.js";
+import type * as amenities from "../amenities.js";
 import type * as auth from "../auth.js";
+import type * as deals from "../deals.js";
 import type * as files from "../files.js";
 import type * as history from "../history.js";
 import type * as http from "../http.js";
@@ -25,6 +27,7 @@ import type * as seed from "../seed.js";
 import type * as social from "../social.js";
 import type * as taste from "../taste.js";
 import type * as users from "../users.js";
+import type * as whop from "../whop.js";
 
 import type {
   ApiFromModules,
@@ -35,7 +38,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adventures: typeof adventures;
+  amenities: typeof amenities;
   auth: typeof auth;
+  deals: typeof deals;
   files: typeof files;
   history: typeof history;
   http: typeof http;
@@ -50,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   social: typeof social;
   taste: typeof taste;
   users: typeof users;
+  whop: typeof whop;
 }>;
 
 /**
