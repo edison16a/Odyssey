@@ -606,6 +606,9 @@ struct Deal: Identifiable, Equatable, Sendable {
     var remaining: Int
     var expiresAt: Date
 
+    /// No card needed: these deals are bought with coins instead.
     var isFree: Bool { priceCents == 0 }
-    var priceText: String { isFree ? "Free" : String(format: "$%.2f", Double(priceCents) / 100) }
+    /// What a coin deal costs: 20 coins per percent off, at least 200, in steps of 50.
+    var coinPrice: Int { isFree ? max(200, (percent * 20 + 25) / 50 * 50) : 0 }
+    var priceText: String { isFree ? "\(coinPrice.formatted()) coins" : String(format: "$%.2f", Double(priceCents) / 100) }
 }

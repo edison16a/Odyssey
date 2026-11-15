@@ -90,7 +90,7 @@ nonisolated struct AppState: Codable, Sendable {
         var gps: Bool?
     }
 
-    var version = 6
+    var version = 7
     var session = Session()
     var interests: [String: Bool] = ["startups": true, "coffee": true, "culture": true]
     var user = User()
@@ -193,6 +193,7 @@ nonisolated struct AppState: Codable, Sendable {
             (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
         }
         version = value(.version, d.version)
+        let savedVersion = version
         session = value(.session, d.session)
         interests = value(.interests, d.interests)
         // Version 6 swapped the books and travel questions for startups and cafes.
@@ -247,6 +248,27 @@ nonisolated struct AppState: Codable, Sendable {
         starred = value(.starred, d.starred)
         recommended = value(.recommended, d.recommended)
         demoMode = value(.demoMode, d.demoMode)
+        if savedVersion < 7 { applyEdisonDemo() }
+        version = d.version
+    }
+
+    /// Version 7: Edison's demo profile. Demo mode on, 15 XP short of Voyager,
+    /// 11th in San Francisco so the Y Combinator check-in lifts him into the top 10,
+    /// a 99 day streak, 7,281 coins and his own photo.
+    private mutating func applyEdisonDemo() {
+        demoMode = true
+        demoArea = "sf"
+        wallet.coins = 7281
+        wallet.xp = 885
+        wallet.points = 492
+        streak.days = 99
+        streak.best = max(streak.best, 99)
+        if user.avatar.kind == "none" { user.avatar = Avatar(kind: "photo", value: "assets/media/people/edison.jpg") }
+        visited.removeAll { $0 == "yc" }
+        firsts.removeAll { $0 == "yc" }
+        checkins["yc"] = nil
+        questsDone["q-yc"] = nil
+        earnedBadges.removeAll { $0 == "top-10" || $0 == "top-100" }
     }
 }
 

@@ -179,6 +179,7 @@ struct CheckInRewardOverlay: View {
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(rewards.earnable || !rewards.fresh ? .white : Palette.gold)
+                if rewards.earnable { breakdown(rewards, demoJump: store.state.demoMode && target.id == "yc") }
             } else {
                 HStack(spacing: 5) {
                     CoinIcon(size: 13)
@@ -200,6 +201,36 @@ struct CheckInRewardOverlay: View {
     }
 
     private var radius: Int { Int(Rewards.checkInRadius) }
+
+    /// Each coin line and the XP, so you know exactly what this adventure pays.
+    private func breakdown(_ rewards: CheckInRewards, demoJump: Bool) -> some View {
+        VStack(spacing: 2) {
+            ForEach(rewards.lines) { line in
+                row(line.label, "+\(line.coins)", color: Palette.gold)
+            }
+            if rewards.xp > 0 { row("Check-in XP", "+\(rewards.xp) XP", color: Color(hex: "#c9b6ff")) }
+            if rewards.videoXp > 0 { row("Video XP", "+\(rewards.videoXp) XP", color: Color(hex: "#c9b6ff")) }
+            let rank = store.rank()
+            if let next = rank.next, rank.toNext > 0 {
+                Text(rewards.totalXp >= rank.toNext || demoJump ? "This ranks you up to \(next.name)"
+                                                    : "\(rank.toNext - rewards.totalXp) XP after this to \(next.name)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.top, 4)
+        .frame(maxWidth: 240)
+    }
+
+    private func row(_ label: String, _ value: String, color: Color) -> some View {
+        HStack {
+            Text(label).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+            Spacer(minLength: 8)
+            Text(value).fontWeight(.heavy).foregroundStyle(color).monospacedDigit()
+        }
+        .font(.system(size: 11, weight: .medium))
+    }
 
     /// Best case with no place yet: a first explorer, recommended check-in on its own.
     private var upTo: Int { Rewards.checkIn.coins + Rewards.first.coins + Rewards.recommended.coins }
