@@ -37,6 +37,8 @@ final class Cloud {
     /// Supermemory profile facts from the last recommendation, for the taste page.
     private(set) var profileFacts: [String] = []
     private(set) var usedSupermemory = false
+    /// How many Supermemory memories the last ranking read.
+    private(set) var memoriesUsed = 0
 
     @ObservationIgnored private weak var store: AppStore?
     @ObservationIgnored private let api = ConvexAPI.shared
@@ -492,6 +494,7 @@ final class Cloud {
         rankedPools.insert(key)
         profileFacts = dict["profileFacts"] as? [String] ?? profileFacts
         usedSupermemory = dict["usedSupermemory"] as? Bool ?? false
+        memoriesUsed = (dict["memoriesUsed"] as? Double).map(Int.init) ?? (dict["memoriesUsed"] as? Int) ?? 0
         store.mergeCloudPicks(out)
     }
 
