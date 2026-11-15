@@ -406,7 +406,7 @@ struct HomeRecommendations: View {
         let lovedIDs = Set(loved.map(\.id))
         let gems = Array(open.filter { store.status(of: $0).status == .new && !lovedIDs.contains($0.id) }.prefix(8))
         VStack(alignment: .leading, spacing: 0) {
-            shelf("Places you'll love", subtitle: "Picked from your taste gem", places: loved)
+            shelf("Places you'll love", subtitle: "Picked for your explorer type: \(TasteGem.of(store).persona)", places: loved)
             shelf("Hidden gems", subtitle: "Nobody on Odyssey has been yet. Be first for +\(Rewards.first.coins) coins", places: gems, star: true)
             Button {
                 Haptics.tap()

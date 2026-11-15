@@ -2,11 +2,10 @@
 //  TasteGem.swift
 //  Odyssey
 //
-//  Your taste gem: a faceted gem in the slanted shape of the Odyssey mark,
-//  coloured by what you like and growing with every place you save. The
-//  colours come from your strongest kinds of places (cafes are amber, parks
-//  green, nightlife indigo...), so no two explorers' gems look the same.
-//  Onboarding builds it, Explore grows it, Profile shows it off.
+//  Your explorer type: a personality like Cafe Hopper, shown as a badge
+//  coloured by what you like. The colours come from your strongest kinds of
+//  places (cafes are amber, parks green, nightlife indigo...). Everyone starts
+//  as a Cafe Hopper; onboarding reveals it, Explore and check-ins shift it.
 //
 
 import Foundation
@@ -67,6 +66,8 @@ struct TasteGem: Equatable {
         for place in store.myPlaces {
             for cat in store.tasteCategories(place) where kinds[cat] != nil { score[cat, default: 0] += 0.3 }
         }
+        // Everyone starts as a Cafe Hopper; saves and check-ins can grow other tastes past it.
+        score["coffee", default: 0] += 2.5
         let top = score.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(3).map(\.key)
         let likes = store.state.taste.votes.values.filter { $0.v > 0 }.count
         guard let first = top.first, let main = kinds[first] else {
@@ -80,107 +81,51 @@ struct TasteGem: Equatable {
     }
 }
 
-/// The gem itself: a slanted, cleanly cut stone in the shape of the Odyssey mark.
-/// One main colour shaded per facet, a hint of your second taste in the table,
-/// and a single slow glint. No glow, wobble or sparkles.
+/// Your explorer type as a badge: its icon on a rounded tile shaded from your
+/// strongest taste into your second. It pops in during onboarding, and a slow
+/// sheen crosses it when animated.
 struct TasteGemView: View {
     var gem: TasteGem
     var size: CGFloat = 120
-    /// Run the slow glint across the table. Off for small or many-at-once gems.
+    /// Run the slow sheen across the tile. Off for small or many-at-once badges.
     var animated = true
-    /// 0...1 override for how built the gem is (onboarding assembles it); nil uses the gem's growth.
+    /// 0...1 override for how far the badge has appeared (onboarding builds it).
     var build: Double? = nil
 
     var body: some View {
-        Group {
-            if animated {
+        let shown = build ?? 1
+        let main = gem.colors[0]
+        let second = gem.colors.count > 1 ? gem.colors[1] : main
+        let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+        ZStack {
+            shape.fill(LinearGradient(colors: [main.adjusted(0.18), main, second.adjusted(-0.1)],
+                                      startPoint: .topLeading, endPoint: .bottomTrailing))
+            shape.strokeBorder(.white.opacity(0.35), lineWidth: max(1, size * 0.02))
+            Image(systemName: gem.icon)
+                .font(.system(size: size * 0.46, weight: .bold))
+                .foregroundStyle(.white)
+                .shadow(color: main.adjusted(-0.4).opacity(0.5), radius: size * 0.03, y: size * 0.02)
+            if animated && size > 40 {
                 TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                    gemBody(t: context.date.timeIntervalSinceReferenceDate)
+                    let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) / 4
+                    LinearGradient(colors: [.clear, .white.opacity(0.28), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: size * 0.35)
+                        .rotationEffect(.degrees(20))
+                        .offset(x: size * (CGFloat(t) * 2.2 - 1.1))
                 }
-            } else {
-                gemBody(t: nil)
+                .clipShape(shape)
+                .allowsHitTesting(false)
             }
         }
         .frame(width: size, height: size)
-        .accessibilityLabel("\(gem.persona) taste gem")
-    }
-
-    private func gemBody(t: Double?) -> some View {
-        let grown = build ?? (0.82 + 0.18 * gem.growth)
-        return Canvas { ctx, canvas in draw(&ctx, canvas, t: t) }
-            .scaleEffect(max(0.05, grown))
-            .shadow(color: gem.colors[0].adjusted(-0.3).opacity(size > 60 ? 0.35 : 0.25), radius: size * 0.06, y: size * 0.04)
-    }
-
-    /// Unit-square corners of the slanted gem, like the Odyssey mark.
-    private static let a = CGPoint(x: 0.34, y: 0.10), b = CGPoint(x: 0.92, y: 0.02)
-    private static let c = CGPoint(x: 0.66, y: 0.90), d = CGPoint(x: 0.08, y: 0.98)
-
-    private func draw(_ ctx: inout GraphicsContext, _ canvas: CGSize, t: Double?) {
-        let s = canvas.width
-        func p(_ u: CGPoint) -> CGPoint { CGPoint(x: u.x * s, y: u.y * s) }
-        let mid = CGPoint(x: 0.5, y: 0.5)
-        func inner(_ u: CGPoint) -> CGPoint { CGPoint(x: mid.x + (u.x - mid.x) * 0.5, y: mid.y + (u.y - mid.y) * 0.5) }
-        let outer = [Self.a, Self.b, Self.c, Self.d]
-        let table = outer.map(inner)
-        let main = gem.colors[0]
-        let second = gem.colors.count > 1 ? gem.colors[1] : main
-
-        // Crown facets: one colour, lit from the top left (top, right, bottom, left).
-        let shades: [Double] = [0.28, -0.12, -0.38, 0.08]
-        for i in 0..<4 {
-            var facet = Path()
-            facet.move(to: p(outer[i]))
-            facet.addLine(to: p(outer[(i + 1) % 4]))
-            facet.addLine(to: p(table[(i + 1) % 4]))
-            facet.addLine(to: p(table[i]))
-            facet.closeSubpath()
-            ctx.fill(facet, with: .color(main.adjusted(shades[i])))
-        }
-        // The table: the brightest face, leaning toward your second taste.
-        var top = Path()
-        top.addLines(table.map(p))
-        top.closeSubpath()
-        ctx.fill(top, with: .linearGradient(Gradient(colors: [main.adjusted(0.42), main.adjusted(0.12), second.adjusted(0.05)]),
-                                            startPoint: p(table[0]), endPoint: p(table[2])))
-        // A fixed highlight on the top-left corner of the table.
-        var spec = Path()
-        spec.move(to: p(table[0]))
-        spec.addLine(to: p(CGPoint(x: table[0].x + (table[1].x - table[0].x) * 0.45, y: table[0].y + (table[1].y - table[0].y) * 0.45)))
-        spec.addLine(to: p(CGPoint(x: table[0].x + (table[3].x - table[0].x) * 0.45, y: table[0].y + (table[3].y - table[0].y) * 0.45)))
-        spec.closeSubpath()
-        ctx.fill(spec, with: .color(.white.opacity(0.28)))
-
-        // One slow glint every few seconds.
-        if let t {
-            let cycle = (t / 4.5).truncatingRemainder(dividingBy: 1)
-            if cycle < 0.3 {
-                let q = cycle / 0.3
-                ctx.drawLayer { layer in
-                    layer.clip(to: top)
-                    let x = (-0.2 + 1.4 * q) * s
-                    var band = Path()
-                    band.move(to: CGPoint(x: x, y: 0))
-                    band.addLine(to: CGPoint(x: x + s * 0.07, y: 0))
-                    band.addLine(to: CGPoint(x: x - s * 0.13, y: s))
-                    band.addLine(to: CGPoint(x: x - s * 0.2, y: s))
-                    band.closeSubpath()
-                    layer.fill(band, with: .color(.white.opacity(0.4 * sin(q * .pi))))
-                }
-            }
-        }
-
-        // Hairline facet edges only; no heavy outline.
-        var edges = Path()
-        for i in 0..<4 {
-            edges.move(to: p(outer[i])); edges.addLine(to: p(table[i]))
-        }
-        edges.addPath(top)
-        ctx.stroke(edges, with: .color(.white.opacity(0.35)), lineWidth: max(0.5, s * 0.005))
+        .scaleEffect(max(0.05, shown))
+        .opacity(min(1, shown * 1.6))
+        .shadow(color: main.adjusted(-0.3).opacity(size > 60 ? 0.35 : 0.2), radius: size * 0.08, y: size * 0.05)
+        .accessibilityLabel("Explorer type: \(gem.persona)")
     }
 }
 
-/// Gem, explorer type and level in one row, for headers.
+/// Explorer type badge and its traits in one row, for headers.
 struct TasteGemBadge: View {
     var gem: TasteGem
     var size: CGFloat = 44
