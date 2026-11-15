@@ -499,6 +499,7 @@
 				INFOPLIST_FILE = "Config/Odyssey-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Odyssey;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Odyssey uses the camera for your check-in photos and the walkthrough videos you choose to share.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "Find friends who already use Odyssey.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Odyssey can keep drawing the streets you walk while the app is closed, if you turn that on in Settings.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Odyssey uses your location to find places around you, draw the streets you have walked and confirm you are there when you check in.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Odyssey records sound with walkthrough videos so other explorers know how busy a place feels.";
@@ -539,6 +540,7 @@
 				INFOPLIST_FILE = "Config/Odyssey-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Odyssey;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Odyssey uses the camera for your check-in photos and the walkthrough videos you choose to share.";
+				INFOPLIST_KEY_NSContactsUsageDescription = "Find friends who already use Odyssey.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Odyssey can keep drawing the streets you walk while the app is closed, if you turn that on in Settings.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Odyssey uses your location to find places around you, draw the streets you have walked and confirm you are there when you check in.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Odyssey records sound with walkthrough videos so other explorers know how busy a place feels.";
