@@ -33,11 +33,10 @@ struct HomeTab: View {
                     HomeAdventureHero()
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
-                    HomeExploredMapCard()
                     HomeTodayQuests(justPaid: paid)
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
-                    HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
+                    HomeExploredMapCard()
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
                     HomeRecommendations(onPick: { preview = $0 })
@@ -406,24 +405,15 @@ struct HomeRecommendations: View {
         let lovedIDs = Set(loved.map(\.id))
         let gems = Array(open.filter { store.status(of: $0).status == .new && !lovedIDs.contains($0.id) }.prefix(8))
         VStack(alignment: .leading, spacing: 0) {
-            if part == .loved {
-                shelf("Places You'll Love", link: "Discover", places: forYou)
-            } else {
-            shelf("Adventures Near You", link: "See all", places: near)
-            shelf("Hidden Gems", link: "Be first · +\(Rewards.first.coins)", places: gems, star: true)
-            }
-            if part == .more, !friends.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    SectionHeader(title: "Adventures Your Friends Completed", link: "Friends") { router.push(.friends) }
-                        .padding(.horizontal, 20)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(friends, id: \.place.id) { item in
-                                HomeFriendAdventureCard(place: item.place, person: item.by) { onPick(item.place) }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
+            shelf("Places you'll love", subtitle: "Picked from your taste gem", places: loved)
+            shelf("Hidden gems", subtitle: "Nobody on Odyssey has been yet. Be first for +\(Rewards.first.coins) coins", places: gems, star: true)
+            Button {
+                Haptics.tap()
+                router.select(.explore)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "safari").font(.system(size: 15, weight: .semibold))
+                    Text("Discover more").font(.system(size: 16, weight: .bold))
                 }
                 .foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity)

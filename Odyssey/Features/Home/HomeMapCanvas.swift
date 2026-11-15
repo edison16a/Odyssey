@@ -112,7 +112,7 @@ struct HomeMapCanvas: View, Equatable {
                     .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .includingAll))
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .all))
         .task(id: selectedFeature) {
             guard let feature = selectedFeature else { return }
             let item: MKMapItem
