@@ -33,6 +33,12 @@ enum ScanViewerPage {
           padding: 12px 18px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.45); background: rgba(255,255,255,.14);
           backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); touch-action: none; }
   #tour.on { background: #2b59ff; border-color: transparent; }
+  .mark { position: fixed; left: 0; top: 0; padding: 5px 10px 5px 8px; border-radius: 999px; background: rgba(11,11,12,.72); color: #fff;
+          font: 600 12px -apple-system, system-ui, sans-serif; white-space: nowrap; pointer-events: none; display: none;
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); will-change: transform; }
+  .mark::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #fff; vertical-align: 1px; }
+  .mark.barrier::before { background: #ff5a5f; }
+  .mark.helps::before { background: #34c77b; }
   #hint { position: fixed; left: 0; right: 0; bottom: calc(190px + env(safe-area-inset-bottom)); text-align: center; pointer-events: none;
           font: 500 13px -apple-system, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 4px #000; opacity: .9; transition: opacity .6s; }
 </style>
@@ -183,8 +189,47 @@ const pts = path.map(p => {
   while (yaw - prevYaw < -Math.PI) yaw += 2 * Math.PI;
   prevYaw = yaw;
   const pos = p.slice(1, 4);
-  return { t: p[0], pos, yaw, pitch, h: dot(pos, up) };
+  return { t: p[0], pos, yaw, pitch, h: dot(pos, up), fw: flat(p.slice(4, 7)) };
 });
+
+// ---- features found in the video, as labels floating in the space ----
+// A feature is known by the frame it shows best in, so it sits a little ahead of where the camera
+// was at that moment. That is a rough spot, good for "the stairs are over there", not a measurement.
+const taken = {};
+const marks = (META.features || []).map(f => {
+  let at = pts[0];
+  for (const p of pts) if (Math.abs(p.t - f.frame) < Math.abs(at.t - f.frame)) at = p;
+  if (Math.abs(at.t - f.frame) > 40) return null; // that part of the walk is not in this scan
+  const stack = taken[at.t] = (taken[at.t] || 0) + 1;
+  const el = document.createElement('div');
+  el.className = 'mark ' + (f.tone || 'neutral');
+  el.textContent = f.label;
+  document.body.appendChild(el);
+  return { el, pos: at.pos.map((v, i) => v + at.fw[i] * 1.8 + up[i] * 0.22 * (stack - 1)) };
+}).filter(Boolean);
+function placeMarks(right, dn, fwd, focal) {
+  const shown = [];
+  for (const m of marks) {
+    const d = [m.pos[0] - cam.pos[0], m.pos[1] - cam.pos[1], m.pos[2] - cam.pos[2]];
+    const z = dot(d, fwd), far = Math.hypot(d[0], d[1], d[2]);
+    m.el.style.display = 'none';
+    if (z < 0.5 || far > 8) continue;
+    shown.push({ m, far, x: (canvas.width / 2 + focal * dot(d, right) / z) / quality, y: (canvas.height / 2 + focal * dot(d, dn) / z) / quality });
+  }
+  // The nearest few, and none on top of another: a label that would cover one already placed moves up.
+  shown.sort((a, b) => a.far - b.far);
+  const boxes = [];
+  for (const s of shown.slice(0, 6)) {
+    const w = (s.m.w = s.m.w || s.m.el.offsetWidth || 120), h = 28;
+    s.m.el.style.display = 'block';
+    if (!s.m.w) s.m.w = s.m.el.offsetWidth;
+    let y = s.y;
+    for (let tries = 0; tries < 8 && boxes.some(b => Math.abs(b.x - s.x) < (b.w + w) / 2 && Math.abs(b.y - y) < h); tries++) y -= h;
+    boxes.push({ x: s.x, y, w });
+    s.m.el.style.opacity = Math.min(1, (8 - s.far) / 3);
+    s.m.el.style.transform = `translate(${s.x}px, ${y}px) translate(-50%, -100%)`;
+  }
+}
 
 const cam = { pos: pts[0].pos.slice(), yaw: pts[0].yaw, pitch: 0 };
 let touring = false, tourT = pts[0].t, dirty = true;
@@ -252,6 +297,7 @@ function draw() {
   gl.uniform2f(uFocal, focal, focal);
   gl.uniform2f(uViewport, w, h);
   sortSplats(fwd, p);
+  placeMarks(right, dn, fwd, focal);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, N);

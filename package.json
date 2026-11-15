@@ -14,9 +14,11 @@
     "typescript": "5.9"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.98",
     "convex": "^1.50.0",
-    "supermemory": "^5.1.2"
+    "supermemory": "^5.1.2",
+    "zod": "^4.6.7"
   }
 }

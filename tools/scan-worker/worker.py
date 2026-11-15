@@ -64,6 +64,31 @@ def upload(file_path):
         return json.loads(res.read())["storageId"]
 
 
+def send_frames(scan_id, images):
+    """Hand a spread of frames to Convex, where Claude reads them for stairs, doors and other features.
+
+    The frame numbers are kept: they tie each feature to a moment in the walk, and so to a spot in the 3D space.
+    """
+    names = sorted(n for n in os.listdir(images) if n.endswith(".jpg"))
+    count = min(24, max(8, len(names) // 10))
+    picks = sorted({names[round(i * (len(names) - 1) / (count - 1))] for i in range(count)})
+    small = tempfile.mkdtemp(prefix="odyssey-frames-")
+    frames = []
+    try:
+        for name in picks:
+            out = os.path.join(small, name)
+            subprocess.run(["sips", "-Z", "1024", "-s", "formatOptions", "70", os.path.join(images, name), "--out", out],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            url = convex("mutation", "scans:workerUploadUrl", {"key": KEY})
+            req = urllib.request.Request(url, data=open(out, "rb").read(), headers={"Content-Type": "image/jpeg"})
+            with urllib.request.urlopen(req, timeout=120) as res:
+                frames.append({"frame": int(name[2:-4]), "storageId": json.loads(res.read())["storageId"]})
+        convex("mutation", "scans:addFrames", {"key": KEY, "id": scan_id, "frames": frames})
+    finally:
+        shutil.rmtree(small, ignore_errors=True)
+    return len(frames)
+
+
 class Reporter:
     """Tells the phone what is happening, and keeps saying it so the scan is not handed to another worker."""
 
@@ -162,6 +187,13 @@ def build(video, work, say):
     frames = len(os.listdir(images))
     if r.returncode != 0 or frames < 20:
         raise ScanError("The video was too short to build a space from. Record at least 20 seconds.")
+
+    if say.scan_id:
+        say("Looking for stairs, doors and other features", 0.09)
+        try:
+            send_frames(say.scan_id, images)
+        except Exception as e:  # the 3D space is still worth building without it
+            print(f"  (could not send frames for analysis: {e})", flush=True)
 
     say("Removing people from the scene" if REMOVE_PEOPLE else "Finding the people so the camera can ignore them", 0.12)
     colmap_masks, brush_masks = os.path.join(work, "colmap_masks"), os.path.join(work, "ds", "masks")
@@ -325,7 +357,30 @@ def main():
     parser = argparse.ArgumentParser(description="Odyssey 3D scan render worker")
     parser.add_argument("--local", help="build one video file without Convex")
     parser.add_argument("--out", help="where --local puts model.bin and meta.json")
+    parser.add_argument("--analyze", metavar="SCAN_ID", nargs="+",
+                        help="read existing scans for building features, without rendering them again")
     opts = parser.parse_args()
+
+    if opts.analyze:
+        need("ffmpeg")
+        for scan_id in opts.analyze:
+            job = convex("mutation", "scans:videoFor", {"key": KEY, "id": scan_id})
+            if not job:
+                print(f"{scan_id}: no such scan")
+                continue
+            work = tempfile.mkdtemp(prefix="odyssey-analyze-")
+            try:
+                video, images = os.path.join(work, "video.mov"), os.path.join(work, "images")
+                os.makedirs(images)
+                urllib.request.urlretrieve(job["videoUrl"], video)
+                # Same frame rate and numbering as the render, so features land in the right spot of the 3D space.
+                subprocess.run([shutil.which("ffmpeg"), "-v", "error", "-y", "-i", video, "-vf", f"fps={FPS}", "-q:v", "3",
+                                os.path.join(images, "f_%04d.jpg")], check=True)
+                print(f"{scan_id} ({job['name']}): sent {send_frames(scan_id, images)} frames")
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
+        return
+
     for tool in ("ffmpeg", "colmap"):
         need(tool)
     brush_bin()

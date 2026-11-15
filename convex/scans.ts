@@ -5,7 +5,8 @@
 // uploads it back. The phone reads the row to show progress and, once it is
 // ready, opens the 3D view. Everything goes through Convex.
 
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -43,6 +44,10 @@ async function present(ctx: QueryCtx, scan: Doc<"scans">, owner?: string) {
     splats: scan.splats,
     meta: scan.meta,
     modelUrl: scan.modelId ? await ctx.storage.getUrl(scan.modelId) : null,
+    analysis: scan.analysis,
+    summary: scan.summary,
+    features: scan.features ?? [],
+    access: scan.access,
   };
 }
 
@@ -50,6 +55,7 @@ async function present(ctx: QueryCtx, scan: Doc<"scans">, owner?: string) {
 async function erase(ctx: MutationCtx, scan: Doc<"scans">) {
   await ctx.db.delete(scan._id);
   if (scan.modelId) await ctx.storage.delete(scan.modelId);
+  for (const f of scan.frames ?? []) await ctx.storage.delete(f.storageId);
   const siblings = await ctx.db
     .query("scans")
     .withIndex("by_place", (q) => q.eq("placeId", scan.placeId))
@@ -277,5 +283,89 @@ export const retry = mutation({
   handler: async (ctx, { key, id }) => {
     checkWorker(key);
     await ctx.db.patch(id, { status: "queued", message: "Waiting for a render computer", progress: 0, updatedAt: Date.now() });
+  },
+});
+
+// ── What the video shows of the building ───────────────────────────────
+
+/** The worker hands over a few frames of the video; Claude then reads them for stairs, doors and the rest. */
+export const addFrames = mutation({
+  args: {
+    key: v.string(),
+    id: v.id("scans"),
+    frames: v.array(v.object({ frame: v.number(), storageId: v.id("_storage") })),
+  },
+  handler: async (ctx, { key, id, frames }) => {
+    checkWorker(key);
+    const scan = await ctx.db.get(id);
+    if (!scan) return;
+    for (const f of scan.frames ?? []) await ctx.storage.delete(f.storageId);
+    await ctx.db.patch(id, { frames, analysis: "pending" });
+    await ctx.scheduler.runAfter(0, internal.scanAnalysis.analyze, { id });
+  },
+});
+
+/** Read the frames a scan already has again, for instance after the instructions changed. */
+export const reanalyze = mutation({
+  args: { key: v.string(), id: v.id("scans") },
+  handler: async (ctx, { key, id }) => {
+    checkWorker(key);
+    const scan = await ctx.db.get(id);
+    if (!scan?.frames?.length) throw new Error("This scan has no frames to read");
+    await ctx.db.patch(id, { analysis: "pending" });
+    await ctx.scheduler.runAfter(0, internal.scanAnalysis.analyze, { id });
+  },
+});
+
+/** The video of a scan, so a worker can pick frames from one that was rendered before frames existed. */
+export const videoFor = mutation({
+  args: { key: v.string(), id: v.id("scans") },
+  handler: async (ctx, { key, id }) => {
+    checkWorker(key);
+    const scan = await ctx.db.get(id);
+    return scan ? { name: scan.name ?? scan.placeName, videoUrl: await ctx.storage.getUrl(scan.videoId) } : null;
+  },
+});
+
+export const framesFor = internalQuery({
+  args: { id: v.id("scans") },
+  handler: async (ctx, { id }) => {
+    const scan = await ctx.db.get(id);
+    if (!scan) return null;
+    const frames = [];
+    for (const f of scan.frames ?? []) {
+      const url = await ctx.storage.getUrl(f.storageId);
+      if (url) frames.push({ frame: f.frame, url });
+    }
+    return { placeName: scan.placeName, name: scan.name ?? scan.placeName, frames };
+  },
+});
+
+export const saveAnalysis = internalMutation({
+  args: {
+    id: v.id("scans"),
+    summary: v.string(),
+    access: v.object({ wheelchair: v.string(), reason: v.string() }),
+    features: v.array(
+      v.object({
+        kind: v.string(),
+        label: v.string(),
+        detail: v.string(),
+        wheelchair: v.string(),
+        certainty: v.string(),
+        frame: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, { id, ...found }) => {
+    if (!(await ctx.db.get(id))) return;
+    await ctx.db.patch(id, { ...found, analysis: "done" });
+  },
+});
+
+export const failAnalysis = internalMutation({
+  args: { id: v.id("scans") },
+  handler: async (ctx, { id }) => {
+    if (await ctx.db.get(id)) await ctx.db.patch(id, { analysis: "failed" });
   },
 });

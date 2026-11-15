@@ -96,6 +96,14 @@ python3 tools/scan-worker/worker.py
 
 Scans currently live on their own Convex dev deployment (`ScanConfig` in `ScanService.swift`, `CONVEX_URL` in the worker), because two people pushing to one dev deployment overwrite each other's functions. Once `convex/scans.ts` is deployed with everything else, point both at the main deployment.
 
+### What the videos say about the building
+
+While a scan renders, the worker also sends about 24 frames of the video to Convex, and `convex/scanAnalysis.ts` asks Claude what they show: stairs, steps, ramps, lifts, doors, restrooms, seating, counters, signs. Each feature is marked as a barrier, a help or neutral for a wheelchair user, and as clearly seen or only likely. The scan also gets a wheelchair verdict for what it covers, and "unknown" is a normal answer when the video never shows the entrance.
+
+A place combines its scans: the worst verdict wins, so one video of stairs at the door outweighs another of a level room. The place page lists the features, and the 3D view shows them as labels near where they were filmed (a rough spot, taken from the frame they showed best in). Everything is presented as seen in a video and read by AI, not as checked by a person.
+
+It needs `ANTHROPIC_API_KEY` set on the Convex deployment (`npx convex env set ANTHROPIC_API_KEY ...`). Scans rendered before this existed can be read without rendering again: `python3 tools/scan-worker/worker.py --analyze <scan id>`.
+
 Filming tips that decide whether a scan works: walk slowly, turn slowly (a quick turn is where the 3D build loses track and everything after it is dropped), and film the room rather than people.
 
 ## Getting started

@@ -96,10 +96,21 @@ struct ScanViewerView: View {
         name = scan.name == scan.placeName ? scan.placeName : "\(scan.name) · \(scan.placeName)"
         do {
             let file = try await scans.modelFile(for: scan)
-            phase = .ready(model: file, meta: meta)
+            phase = .ready(model: file, meta: ScanViewerView.meta(meta, with: scan.features))
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+}
+
+extension ScanViewerView {
+    /// The scan's path data plus the features found in the video, so the page can label them in the space.
+    static func meta(_ meta: String, with features: [ScanFeature]) -> String {
+        guard !features.isEmpty,
+              var object = try? JSONSerialization.jsonObject(with: Data(meta.utf8)) as? [String: Any] else { return meta }
+        object["features"] = features.map { ["label": $0.label, "tone": $0.wheelchair, "frame": $0.frame] }
+        guard let data = try? JSONSerialization.data(withJSONObject: object), let text = String(data: data, encoding: .utf8) else { return meta }
+        return text
     }
 }
 
@@ -201,6 +212,7 @@ struct ScanPlaceRow: View {
         let spaces = scans.spaces(for: place.id)
         let building = scans.building(for: place.id)
         VStack(spacing: 8) {
+            if !spaces.isEmpty { PlaceInsideCard(place: place) }
             ForEach(spaces) { space in
                 row(icon: "cube.transparent.fill", tint: Palette.accent, title: space.name,
                     detail: space.creatorName.map { "3D space by \($0)" } ?? "Walk around in 3D",
@@ -326,5 +338,103 @@ struct ScanPlaceRow: View {
         before()
         // Let the sheet finish closing, or the cover can fail to present.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.present(cover) }
+    }
+}
+
+/// What explorers' videos show of the inside of a place: whether a wheelchair gets in, and the
+/// stairs, lifts, restrooms, seating and so on that were filmed. All of it comes from video and
+/// is labelled that way; nothing here has been checked by a person.
+struct PlaceInsideCard: View {
+    var place: Place
+    private let scans = ScanService.shared
+    @State private var showAll = false
+
+    var body: some View {
+        let access = scans.access(for: place.id)
+        let features = scans.features(for: place.id)
+        if access != nil || !features.isEmpty || scans.isReading(place.id) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Inside this place").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
+                if let access { banner(access) }
+                if scans.isReading(place.id) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Looking through a video for stairs, doors and other features").font(.system(size: 13)).foregroundStyle(Palette.muted)
+                    }
+                }
+                if !features.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array((showAll ? features : Array(features.prefix(4))).enumerated()), id: \.offset) { _, item in
+                            row(item.feature, space: item.space)
+                        }
+                    }
+                    if features.count > 4 {
+                        Button(showAll ? "Show fewer" : "Show all \(features.count) features") {
+                            withAnimation(.easeInOut(duration: 0.25)) { showAll.toggle() }
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Palette.accentInk)
+                    }
+                }
+                Text("From explorers' videos, read by AI. Not checked by a person.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.muted)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        }
+    }
+
+    private func banner(_ access: PlaceAccess) -> some View {
+        let look: (title: String, icon: String, tint: Color, soft: Color) = {
+            switch access.verdict {
+            case "not_accessible": return ("Not wheelchair accessible", "figure.roll", Palette.danger, Palette.danger.opacity(0.12))
+            case "partly": return ("Partly wheelchair accessible", "figure.roll", Palette.flame, Palette.flameSoft)
+            case "accessible": return ("Step-free where it was filmed", "figure.roll", Palette.success, Palette.successSoft)
+            default: return ("Wheelchair access unknown", "questionmark.circle", Palette.muted, Palette.surface3)
+            }
+        }()
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: look.icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(look.tint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(look.title).font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.ink)
+                Text(access.reason).font(.system(size: 13)).foregroundStyle(Palette.ink2).fixedSize(horizontal: false, vertical: true)
+                Text("Seen in \(access.space)").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(look.soft, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+    }
+
+    private func row(_ feature: ScanFeature, space: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: feature.icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(feature.isBarrier ? Palette.danger : feature.helps ? Palette.success : Palette.ink2)
+                .frame(width: 26, height: 26)
+                .background(.white, in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(feature.label).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
+                    if feature.certainty != "seen" {
+                        Text("Likely").font(.system(size: 10, weight: .bold)).foregroundStyle(Palette.muted)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.white, in: Capsule())
+                    }
+                }
+                Text("\(feature.detail) Seen in \(space).")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
     }
 }

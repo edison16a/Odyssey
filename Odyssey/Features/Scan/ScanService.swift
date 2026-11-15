@@ -13,6 +13,64 @@ import AVFoundation
 import Foundation
 import Observation
 
+/// Something the video shows of the building: stairs, a ramp, a restroom, seating.
+nonisolated struct ScanFeature: Identifiable, Hashable, Sendable {
+    /// "stairs", "elevator", "restroom"...
+    var kind: String
+    var label: String
+    var detail: String
+    /// What it means for a wheelchair user: "barrier", "helps" or "neutral".
+    var wheelchair: String
+    /// "seen" when it is clearly in the video, "likely" when it is only partly visible.
+    var certainty: String
+    /// The video frame it shows best in, which places it in the 3D space.
+    var frame: Int
+
+    var id: String { "\(kind)|\(label)|\(frame)" }
+    var isBarrier: Bool { wheelchair == "barrier" }
+    var helps: Bool { wheelchair == "helps" }
+
+    var icon: String {
+        switch kind {
+        case "stairs", "step", "escalator": return "figure.stairs"
+        case "ramp": return "road.lanes"
+        case "elevator": return "arrow.up.arrow.down.square"
+        case "entrance": return "door.left.hand.open"
+        case "exit": return "figure.walk.departure"
+        case "door", "automatic_door": return "door.left.hand.closed"
+        case "narrow_passage", "hallway": return "arrow.left.and.right"
+        case "restroom": return "toilet"
+        case "accessible_restroom": return "figure.roll"
+        case "seating": return "chair.lounge"
+        case "tables", "workspace": return "table.furniture"
+        case "counter", "reception": return "person.crop.rectangle"
+        case "kitchen", "food_drinks": return "fork.knife"
+        case "power_outlets": return "powerplug"
+        case "signage": return "signpost.right"
+        case "screen": return "tv"
+        default: return "mappin"
+        }
+    }
+
+    init?(_ json: [String: Any]) {
+        guard let kind = json["kind"] as? String, let label = json["label"] as? String else { return nil }
+        self.kind = kind
+        self.label = label
+        detail = json["detail"] as? String ?? ""
+        wheelchair = json["wheelchair"] as? String ?? "neutral"
+        certainty = json["certainty"] as? String ?? "seen"
+        frame = (json["frame"] as? NSNumber)?.intValue ?? 0
+    }
+}
+
+/// What the videos of a place say about wheelchair access, and which space said it.
+nonisolated struct PlaceAccess: Hashable, Sendable {
+    /// "not_accessible", "partly", "accessible" or "unknown".
+    var verdict: String
+    var reason: String
+    var space: String
+}
+
 /// One scan of a place, as Convex reports it.
 nonisolated struct Scan: Identifiable, Hashable, Sendable {
     var id: String
@@ -33,6 +91,13 @@ nonisolated struct Scan: Identifiable, Hashable, Sendable {
     var meta: String?
     var splats: Int
     var createdAt: Double
+    /// Reading the video for building features: "pending", "done", "failed", or nil when it never ran.
+    var analysis: String?
+    var summary: String?
+    var features: [ScanFeature]
+    /// "not_accessible", "partly", "accessible" or "unknown", from this video alone.
+    var wheelchair: String?
+    var wheelchairReason: String?
 
     var isReady: Bool { status == "ready" && modelURL != nil && meta != nil }
     var isWorking: Bool { status == "queued" || status == "processing" }
@@ -53,6 +118,12 @@ nonisolated struct Scan: Identifiable, Hashable, Sendable {
         meta = json["meta"] as? String
         splats = (json["splats"] as? NSNumber)?.intValue ?? 0
         createdAt = (json["createdAt"] as? NSNumber)?.doubleValue ?? 0
+        analysis = json["analysis"] as? String
+        summary = json["summary"] as? String
+        features = (json["features"] as? [[String: Any]] ?? []).compactMap(ScanFeature.init)
+        let access = json["access"] as? [String: Any]
+        wheelchair = access?["wheelchair"] as? String
+        wheelchairReason = access?["reason"] as? String
     }
 }
 
@@ -131,6 +202,36 @@ final class ScanService {
         guard let newest = scans.first(where: { $0.placeID == placeID }), newest.isFailed else { return nil }
         return newest
     }
+
+    /// Wheelchair access for a place, from all its videos. The worst finding wins: one video showing
+    /// stairs as the way in outweighs another that only shows a level room.
+    func access(for placeID: String) -> PlaceAccess? {
+        let judged = spaces(for: placeID).filter { $0.wheelchair != nil }
+        for verdict in ["not_accessible", "partly", "accessible", "unknown"] {
+            if let scan = judged.first(where: { $0.wheelchair == verdict }) {
+                return PlaceAccess(verdict: verdict, reason: scan.wheelchairReason ?? "", space: scan.name)
+            }
+        }
+        return nil
+    }
+
+    /// Everything the videos of a place show, barriers first, each thing once.
+    func features(for placeID: String) -> [(feature: ScanFeature, space: String)] {
+        var seen = Set<String>()
+        var out: [(feature: ScanFeature, space: String)] = []
+        for scan in spaces(for: placeID) {
+            for feature in scan.features where seen.insert("\(feature.kind)|\(feature.label.lowercased())").inserted {
+                out.append((feature, scan.name))
+            }
+        }
+        let rank: (ScanFeature) -> Int = { $0.isBarrier ? 0 : $0.helps ? 1 : 2 }
+        return out.enumerated().sorted { a, b in
+            rank(a.element.feature) != rank(b.element.feature) ? rank(a.element.feature) < rank(b.element.feature) : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// Whether a video of this place is still being read for features.
+    func isReading(_ placeID: String) -> Bool { scans.contains { $0.placeID == placeID && $0.analysis == "pending" } }
 
     /// A name for the next space at a place: "Main space" for the first, then "Space 2", "Space 3".
     func suggestedName(for placeID: String) -> String {

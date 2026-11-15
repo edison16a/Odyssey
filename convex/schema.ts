@@ -283,6 +283,23 @@ export default defineSchema({
     modelId: v.optional(v.id("_storage")), // the splat file the phone renders
     meta: v.optional(v.string()), // JSON: up direction and the recorded path
     splats: v.optional(v.number()),
+    // What the video shows of the building: stairs, doors, seating... Read from a few frames by Claude.
+    frames: v.optional(v.array(v.object({ frame: v.number(), storageId: v.id("_storage") }))),
+    analysis: v.optional(v.string()), // "pending", "done" or "failed"
+    summary: v.optional(v.string()),
+    features: v.optional(
+      v.array(
+        v.object({
+          kind: v.string(), // "stairs", "elevator", "restroom"...
+          label: v.string(),
+          detail: v.string(),
+          wheelchair: v.string(), // "barrier", "helps" or "neutral"
+          certainty: v.string(), // "seen" (clearly in the video) or "likely"
+          frame: v.number(), // the video frame it shows best in, which places it in the 3D space
+        }),
+      ),
+    ),
+    access: v.optional(v.object({ wheelchair: v.string(), reason: v.string() })),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
