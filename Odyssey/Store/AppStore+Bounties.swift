@@ -25,7 +25,9 @@ extension AppStore {
 
     /// Every bounty, yours first, with your progress folded in.
     var bounties: [Bounty] {
-        (state.myBounties + extras.bounties).map { b in
+        let mine = Set(state.myBounties.map(\.id))
+        let live = liveBounties.filter { !mine.contains($0.id) }
+        return (state.myBounties + live + extras.bounties).map { b in
             var out = b
             let p = state.bountyProgress[b.id] ?? AppState.BountyProgress()
             if p.recorded > 0 && !b.crew.contains("me") { out.crew = b.crew + ["me"] }
@@ -87,6 +89,18 @@ extension AppStore {
         update { s in s.myBounties.insert(b, at: 0) }
         Cloud.shared.recordBounty(b)
         return b
+    }
+
+    /// A bounty paid through Whop: the server already has it live, so just show it as yours.
+    func addPaidBounty(_ paid: Bounty) {
+        var b = paid
+        b.recorded = 0
+        b.crew = []
+        b.mine = true
+        update { s in
+            s.myBounties.removeAll { $0.id == b.id }
+            s.myBounties.insert(b, at: 0)
+        }
     }
 
     // MARK: Gift cards paid with coins or bounty cash

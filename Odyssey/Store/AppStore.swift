@@ -24,6 +24,8 @@ final class AppStore {
     var amenityPoints: [AmenityPoint] = []
     /// Whop deals by place id, from Convex.
     var deals: [String: [Deal]] = [:]
+    /// Bounties every explorer has paid for and pushed live, from Convex.
+    var liveBounties: [Bounty] = []
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?

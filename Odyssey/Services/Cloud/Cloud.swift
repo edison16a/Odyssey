@@ -333,6 +333,48 @@ final class Cloud {
             }
             store?.deals = byPlace
         }
+        await loadLiveBounties()
+    }
+
+    /// Live bounties from every explorer, so a bounty pushed on one phone shows on the map everywhere.
+    func loadLiveBounties() async {
+        guard let rows = try? await api.query("social:bounties") as? [[String: Any]] else { return }
+        let list: [Bounty] = rows.compactMap { row in
+            var r = row
+            r.removeValue(forKey: "_owner")
+            r.removeValue(forKey: "mine")
+            guard let data = try? JSONSerialization.data(withJSONObject: r) else { return nil }
+            return try? JSONDecoder().decode(Bounty.self, from: data)
+        }
+        store?.liveBounties = list
+    }
+
+    struct BountyCheckout {
+        var bountyID: String
+        var url: URL
+        var amount: Double
+    }
+
+    /// Make a Whop checkout for a bounty (pool plus the 10% fee). The bounty goes live once it is paid.
+    func createBountyCheckout(_ bounty: Bounty) async throws -> BountyCheckout {
+        let data = try JSONEncoder().encode(bounty)
+        let json = try JSONSerialization.jsonObject(with: data)
+        let out = try await api.action("whop:createBountyCheckout", ["bounty": json], timeout: 25)
+        guard let d = out as? [String: Any], let id = d["bountyId"] as? String,
+              let link = d["url"] as? String, let url = URL(string: link) else {
+            throw NSError(domain: "Odyssey", code: 1, userInfo: [NSLocalizedDescriptionKey: "Whop did not return a checkout"])
+        }
+        return BountyCheckout(bountyID: id, url: url, amount: (d["amount"] as? NSNumber)?.doubleValue ?? bounty.pool * 1.1)
+    }
+
+    /// "pending", "paid" or "missing". Asks Whop directly when `sync` is set, in case the webhook is slow.
+    func bountyStatus(_ bountyID: String, sync: Bool = false) async -> String {
+        if sync, let d = try? await api.action("whop:syncBounty", ["bountyId": bountyID], timeout: 15) as? [String: Any],
+           let status = d["status"] as? String {
+            return status
+        }
+        let d = try? await api.query("whop:bountyStatus", ["bountyId": bountyID]) as? [String: Any]
+        return d?["status"] as? String ?? "pending"
     }
 
     /// Claim a deal through (mock) Whop. Returns the code to show at the counter.

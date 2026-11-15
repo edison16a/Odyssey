@@ -63,6 +63,14 @@ struct HomePlacePreview: View {
                     }
                     .buttonStyle(.pill(.primary))
                 }
+                Button {
+                    dismiss()
+                    let id = place.id
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.present(.setBounty(placeID: id)) }
+                } label: {
+                    Label("Set bounty", systemImage: "dollarsign.circle.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.pill(.primary))
                 Button("See place details") {
                     dismiss()
                     let id = place.id

@@ -269,6 +269,24 @@ export default defineSchema({
     .index("by_bountyId", ["bountyId"])
     .index("by_owner", ["ownerId"]),
 
+  /** A bounty waiting on its Whop payment; it goes live in `bounties` once paid. */
+  bountyCheckouts: defineTable({
+    bountyId: v.string(),
+    checkoutId: v.string(),
+    ownerId: v.optional(v.id("users")),
+    data: v.any(),
+    amount: v.number(), // dollars charged, fee included
+    status: v.string(), // "pending" | "paid"
+    paymentId: v.optional(v.string()),
+    createdAt: v.number(),
+    paidAt: v.optional(v.number()),
+  })
+    .index("by_bountyId", ["bountyId"])
+    .index("by_checkoutId", ["checkoutId"]),
+
+  /** Whop webhook deliveries already handled (Whop may send one more than once). */
+  whopEvents: defineTable({ webhookId: v.string(), type: v.string(), at: v.number() }).index("by_webhookId", ["webhookId"]),
+
   /** Public amenities on the map: bathrooms, elevators, water, free wifi (demo seed). */
   amenities: defineTable({
     kind: v.string(), // "bathroom" | "elevator" | "water" | "wifi"

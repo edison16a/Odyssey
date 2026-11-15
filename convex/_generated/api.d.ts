@@ -25,6 +25,7 @@ import type * as seed from "../seed.js";
 import type * as social from "../social.js";
 import type * as taste from "../taste.js";
 import type * as users from "../users.js";
+import type * as whop from "../whop.js";
 
 import type {
   ApiFromModules,
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   social: typeof social;
   taste: typeof taste;
   users: typeof users;
+  whop: typeof whop;
 }>;
 
 /**

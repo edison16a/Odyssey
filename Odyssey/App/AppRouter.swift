@@ -68,6 +68,7 @@ enum Cover: Identifiable, Hashable {
     case dayShare
     case powerUp(days: Int)
     case bountyWizard
+    case setBounty(placeID: String)
     case globe
     case exploredMap(focus: String?)
     case countryScene
@@ -79,6 +80,7 @@ enum Cover: Identifiable, Hashable {
         case .dayShare: return "day"
         case .powerUp(let days): return "power-\(days)"
         case .bountyWizard: return "bounty-new"
+        case .setBounty(let id): return "set-bounty-\(id)"
         case .globe: return "globe"
         case .exploredMap(let focus): return "explored-\(focus ?? "")"
         case .countryScene: return "country"
@@ -91,6 +93,8 @@ final class AppRouter {
     var tab: AppTab = .home
     var paths: [AppTab: [Route]] = [:]
     var cover: Cover?
+    /// Set by the odyssey://bounty-paid/<id> link Whop's checkout hands back to.
+    var paidBountyID: String?
     /// Bumped when a tab is tapped while open, so it can scroll to the top.
     var scrollToTop: [AppTab: Int] = [:]
 
@@ -135,6 +139,11 @@ final class AppRouter {
         guard url.scheme == "odyssey", store.state.session.signedIn else { return }
         let host = url.host ?? ""
         let id = url.pathComponents.dropFirst().first
+        if host == "bounty-paid" {
+            // Back from Whop checkout: leave the Set bounty flow open so it can show the result.
+            paidBountyID = id
+            return
+        }
         cover = nil
         switch host {
         case "onboarding":

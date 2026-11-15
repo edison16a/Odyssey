@@ -59,6 +59,7 @@ struct CoverView: View {
         case .dayShare: DayShareView()
         case .powerUp(let days): PowerUpPreview(days: days)
         case .bountyWizard: BountyWizardView()
+        case .setBounty(let id): SetBountyFlow(placeID: id)
         case .globe: GlobeView()
         case .exploredMap(let focus): ExploredMapView(focus: focus)
         case .countryScene: CountrySceneView()
