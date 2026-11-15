@@ -258,9 +258,7 @@ struct HomeAdventureHero: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { glow = true }
-        }
+        .loops($glow, .easeInOut(duration: 1.4))
     }
 }
 
