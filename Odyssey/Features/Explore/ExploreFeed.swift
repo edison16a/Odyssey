@@ -87,7 +87,8 @@ final class ExploreFeed {
         while remaining < Self.batch {
             let fresh = candidates(store)
             if !fresh.isEmpty {
-                let next = Array(store.rankForYou(fresh).prefix(Self.batch))
+                let next = Array(await store.rankForYouOnline(fresh).filter { !dealt.contains($0.id) }.prefix(Self.batch))
+                if next.isEmpty { dealt.formUnion(fresh.map(\.id)); continue }
                 dealt.formUnion(next.map(\.id))
                 cards += next
                 store.markRecommended(next)

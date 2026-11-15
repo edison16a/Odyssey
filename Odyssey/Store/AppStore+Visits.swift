@@ -114,10 +114,12 @@ extension AppStore {
         let after = standings()
         let board = fresh ? boardMoment(before: before, after: after) : nil
         if let board { award(board) }
-        return CheckInResult(fresh: fresh, first: first, coins: coins, xp: xp, points: points, streak: streak,
-                             milestone: milestone, quest: quest, partners: quest.map { questPartners($0.id) } ?? [],
-                             before: before, after: after, rankBefore: rankBefore, rankAfter: rank(), post: post,
-                             recommended: picked, board: board)
+        let result = CheckInResult(fresh: fresh, first: first, coins: coins, xp: xp, points: points, streak: streak,
+                                   milestone: milestone, quest: quest, partners: quest.map { questPartners($0.id) } ?? [],
+                                   before: before, after: after, rankBefore: rankBefore, rankAfter: rank(), post: post,
+                                   recommended: picked, board: board)
+        Cloud.shared.recordCheckIn(place, caption: caption, photoFile: photoFile, selfieFile: selfieFile, result: result)
+        return result
     }
 
     /// A walkthrough video the explorer chose to share. Pays once per place per day.

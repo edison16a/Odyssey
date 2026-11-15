@@ -92,6 +92,8 @@ extension AppStore {
                 s.taste.votes.removeValue(forKey: place.id)
             }
         }
+        cloudPicks[place.id] = nil
+        Cloud.shared.recordVote(place, value: next)
         return next
     }
 
@@ -129,8 +131,9 @@ extension AppStore {
     }
 
     private func rankUncached(_ places: [Place]) -> [Place] {
+        // The server's Supermemory-backed score when it has one, the phone's otherwise.
         places.filter { voteOf($0) >= 0 }
-            .map { ($0, score($0, metres: metres(to: $0))) }
+            .map { ($0, cloudPicks[$0.id]?.score ?? score($0, metres: metres(to: $0))) }
             .sorted { $0.1 > $1.1 }
             .map(\.0)
     }
@@ -147,6 +150,7 @@ extension AppStore {
 
     /// A short, honest reason this place was recommended.
     func why(_ place: Place, metres: Double? = nil) -> String {
+        if let pick = cloudPicks[place.id], !pick.reason.isEmpty { return pick.reason }
         let distance = metres ?? self.metres(to: place)
         // Walk minutes are all that distance changes in the sentence.
         return memo("why-\(place.id)-\(Int((distance / 80).rounded()))") { whyUncached(place, distance: distance) }
@@ -194,5 +198,6 @@ extension AppStore {
 
     func resetTaste() {
         update { s in s.taste = AppState.Taste() }
+        Cloud.shared.resetTaste()
     }
 }

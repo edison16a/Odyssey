@@ -21,6 +21,8 @@ final class AppStore {
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?
+    /// Recommendations from Convex (Supermemory-backed), by place id.
+    var cloudPicks: [String: CloudPick] = [:]
 
     @ObservationIgnored private let fileName = "odyssey-state.json"
     /// Previews and tests never touch the saved state or the widgets.
@@ -58,6 +60,11 @@ final class AppStore {
         save()
     }
 
+    /// Cached results rebuild on the next read (after server data arrives, say).
+    func invalidate() {
+        version += 1
+    }
+
     /// Work out a value once per change of state (and position), then reuse it.
     /// Keeps lists like "picked for you" and the feed from being rebuilt on every redraw.
     func memo<T>(_ key: String, _ make: () -> T) -> T {
@@ -78,6 +85,7 @@ final class AppStore {
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
         scheduleWidgetRefresh()
+        Cloud.shared.stateChanged()
     }
 
     /// Write the current state now, off the main thread.

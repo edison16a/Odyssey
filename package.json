@@ -1,0 +1,22 @@
+{
+  "name": "odyssey-backend",
+  "private": true,
+  "type": "module",
+  "description": "Convex backend for the Odyssey iOS app",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "seed": "node tools/convex-seed.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "jose": "^6.2.17",
+    "typescript": "5.9"
+  },
+  "dependencies": {
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.98",
+    "convex": "^1.50.0",
+    "supermemory": "^5.1.2"
+  }
+}

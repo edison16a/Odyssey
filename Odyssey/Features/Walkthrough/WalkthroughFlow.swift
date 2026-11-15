@@ -93,6 +93,8 @@ struct WalkthroughFlow: View {
         if left > 0 { try? await Task.sleep(for: .seconds(left)) }
         if choice.share {
             let saved = store.addVideo(place, seconds: seconds, insights: found.insights)
+            Cloud.shared.recordWalkthrough(place, seconds: seconds, video: simulated ? nil : video,
+                                           insights: found.insights, points: saved.points)
             result = saved
             if !saved.already { payout = store.bountyPayout(for: place) }
         } else {
