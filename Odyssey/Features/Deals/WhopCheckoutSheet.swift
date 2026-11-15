@@ -56,7 +56,7 @@ struct WhopCheckoutSheet: View {
                 Text("Secure").font(.system(size: 11, weight: .bold))
             }
             .foregroundStyle(Palette.success)
-            IconButton(icon: "xmark", kind: .soft, size: 32, label: "Close") { dismiss() }
+            IconButton(icon: "close", kind: .soft, size: 32, label: "Close") { dismiss() }
                 .disabled(phase == .paying)
         }
         .padding(.horizontal, 20)

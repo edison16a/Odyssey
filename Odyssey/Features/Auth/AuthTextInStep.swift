@@ -116,7 +116,9 @@ struct AuthTextInStep: View {
     /// Open Messages with the code already written to Odyssey's line.
     private func textIt() {
         guard let login, let line = login.line else { return }
-        let body = login.code.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? login.code
+        // The (K-Y6BRV2) tag routes the first text on Keiki's shared line to the Odyssey agent.
+        let text = "Odyssey sign-in code \(login.code) (K-Y6BRV2)"
+        let body = text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? text
         if let url = URL(string: "sms:\(line)&body=\(body)") { openURL(url) }
     }
 

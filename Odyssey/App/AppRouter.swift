@@ -137,6 +137,9 @@ final class AppRouter {
         let id = url.pathComponents.dropFirst().first
         cover = nil
         switch host {
+        case "onboarding":
+            // Demo reset: replay onboarding (connect, compile, gem reveal) without signing out.
+            store.update { s in s.session.onboarded = false }
         case "checkin":
             present(.checkIn(placeID: id))
         case "place":
