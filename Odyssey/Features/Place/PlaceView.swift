@@ -1,0 +1,204 @@
+//
+//  PlaceView.swift
+//  Odyssey
+//
+//  The place page. Real photo up top, then the two things you do here:
+//  check in, or get directions in Apple Maps (which also starts the
+//  adventure Live Activity). Thumbs teach Odyssey what you like. Below sit
+//  the recognition blocks: the first explorer, shared walkthroughs, the
+//  regulars and the activity grid. Ported from features/place/place.js.
+//
+
+import Foundation
+import SwiftUI
+
+struct PlaceView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AppRouter.self) private var router
+    var placeID: String
+    @State private var scrolled = false
+
+    var body: some View {
+        if let place = store.place(placeID) {
+            content(place)
+        } else {
+            VStack(spacing: 0) {
+                NavHeader(title: "Place", back: { router.pop() })
+                Spacer()
+                Text("This place is not available right now").mutedStyle(15)
+                Spacer()
+            }
+            .background(Palette.surface)
+        }
+    }
+
+    private func content(_ place: Place) -> some View {
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    hero(place)
+                    PlaceMainCard(place: place)
+                        .padding(.top, -26)
+                    PlaceSectionsStack(place: place)
+                    Color.clear.frame(height: 40)
+                }
+            }
+            .ignoresSafeArea(edges: .top)
+            .onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y > 210
+            } action: { _, isScrolled in
+                withAnimation(.easeOut(duration: 0.2)) { scrolled = isScrolled }
+            }
+            topBar(place)
+        }
+        .background(Palette.surface)
+    }
+
+    private func hero(_ place: Place) -> some View {
+        PhotoView(path: place.photo)
+            .frame(height: 300)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.45), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 120)
+            }
+            .clipped()
+    }
+
+    /// Dark round buttons over the photo, a white title bar once scrolled.
+    private func topBar(_ place: Place) -> some View {
+        HStack(spacing: 8) {
+            IconButton(icon: "back", kind: scrolled ? .clear : .dark, label: "Back") { router.pop() }
+            Spacer()
+            if scrolled {
+                Text(place.name)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                    .transition(.opacity)
+                Spacer()
+            }
+            PlaceStarButton(place: place, light: !scrolled)
+            ShareLink(item: "Check out \(place.name) on Odyssey") {
+                Image(systemName: Icon.symbol("share"))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(scrolled ? Palette.ink : .white)
+                    .frame(width: 40, height: 40)
+                    .background {
+                        if !scrolled {
+                            Circle().fill(.black.opacity(0.45)).background(.ultraThinMaterial, in: Circle())
+                        }
+                    }
+            }
+            .accessibilityLabel("Share")
+        }
+        .padding(.horizontal, scrolled ? 12 : 16)
+        .frame(height: 52)
+        .background {
+            if scrolled {
+                Palette.surface
+                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 1) }
+                    .ignoresSafeArea(edges: .top)
+            }
+        }
+    }
+}
+
+/// The white sheet that overlaps the photo: tags, name, facts and actions.
+private struct PlaceMainCard: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AppRouter.self) private var router
+    var place: Place
+
+    var body: some View {
+        let metres = store.metres(to: place)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                statusTag
+                Tag(text: store.placeKind(place).label, icon: store.placeKind(place).icon)
+            }
+            .padding(.bottom, 8)
+            Text(place.name)
+                .font(.system(size: 30, weight: .bold))
+                .tracking(-0.6)
+                .foregroundStyle(Palette.ink)
+                .padding(.bottom, 6)
+            if let rating = place.rating { ratingRow(rating) }
+            Text(facts(metres)).mutedStyle(13)
+            actions.padding(.vertical, 16)
+            whyRow(metres)
+            if let blurb = place.blurb, !blurb.isEmpty {
+                Text(blurb)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.surface, in: UnevenRoundedRectangle(topLeadingRadius: Radius.xl, topTrailingRadius: Radius.xl, style: .continuous))
+    }
+
+    @ViewBuilder private var statusTag: some View {
+        let info = store.status(of: place)
+        switch info.status {
+        case .mine: Tag(text: "You explored this", icon: "check", tone: .success)
+        case .new: Tag(text: "Be the first explorer", icon: "star-fill", tone: .rare)
+        case .explored: Tag(text: "\(info.explorers) explorers", icon: "users")
+        }
+    }
+
+    private func ratingRow(_ rating: Double) -> some View {
+        let full = Int(rating.rounded())
+        return HStack(spacing: 6) {
+            HStack(spacing: 1) {
+                ForEach(0..<5, id: \.self) { i in
+                    Image(systemName: i < full ? "star.fill" : "star").font(.system(size: 12, weight: .semibold))
+                }
+            }
+            .foregroundStyle(Palette.gold)
+            Text(String(format: "%.1f", rating)).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ink)
+            Text("(\(Format.number(place.reviews ?? 0)))").mutedStyle(13)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func facts(_ metres: Double) -> String {
+        [Format.distance(metres), Format.walkTime(metres), place.hours ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    private var actions: some View {
+        let done = store.checkedInToday(place)
+        return HStack(spacing: 8) {
+            Button {
+                router.present(.checkIn(placeID: place.id))
+            } label: {
+                Label(done ? "Explored today" : "Check in", systemImage: done ? "checkmark" : "camera")
+            }
+            .buttonStyle(.pill(done ? .soft : .accent, fill: true))
+            Button {
+                Haptics.tap()
+                LiveActivityService.shared.start(place: place, store: store)
+                NearbyService.directions(to: place)
+            } label: {
+                Label("Directions", systemImage: "location.north.fill")
+            }
+            .buttonStyle(.pill(.primary, fill: true))
+        }
+    }
+
+    private func whyRow(_ metres: Double) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
+                OdysseyMark(size: 14)
+                Text(store.why(place, metres: metres))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(2)
+            }
+            .foregroundStyle(Palette.accentInk)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            ThumbsView(place: place)
+        }
+    }
+}
