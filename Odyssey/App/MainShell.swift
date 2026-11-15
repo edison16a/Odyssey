@@ -82,7 +82,7 @@ struct TabBar: View {
             tab(.friends)
             Button {
                 Haptics.tap()
-                router.present(.checkIn(placeID: nil))
+                router.present(.scan(placeID: nil))
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .semibold))
@@ -94,7 +94,7 @@ struct TabBar: View {
             .buttonStyle(PressStyle(scale: 0.92))
             .frame(maxWidth: .infinity)
             .offset(y: -2)
-            .accessibilityLabel("Create")
+            .accessibilityLabel("Scan a place in 3D")
             tab(.explore)
             tab(.profile)
         }

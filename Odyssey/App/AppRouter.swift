@@ -71,6 +71,10 @@ enum Cover: Identifiable, Hashable {
     case globe
     case exploredMap(focus: String?)
     case countryScene
+    /// Record a walkthrough video to turn a place into a 3D space. Nil picks the nearest place by GPS.
+    case scan(placeID: String?)
+    /// Walk around inside a finished 3D scan.
+    case scanViewer(scanID: String)
 
     var id: String {
         switch self {
@@ -82,6 +86,8 @@ enum Cover: Identifiable, Hashable {
         case .globe: return "globe"
         case .exploredMap(let focus): return "explored-\(focus ?? "")"
         case .countryScene: return "country"
+        case .scan(let id): return "scan-\(id ?? "")"
+        case .scanViewer(let id): return "scan-view-\(id)"
         }
     }
 }
@@ -139,6 +145,9 @@ final class AppRouter {
         switch host {
         case "checkin":
             present(.checkIn(placeID: id))
+        case "scan":
+            // odyssey://scan films a new 3D scan; odyssey://scan/<scan id> opens a finished one.
+            if let id { present(.scanViewer(scanID: id)) } else { present(.scan(placeID: nil)) }
         case "place":
             tab = .home
             paths[.home] = id.map { [.place($0)] } ?? []

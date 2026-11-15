@@ -44,6 +44,7 @@ struct HomePlacePreview: View {
                 contributorList
                 status(info)
                 bountyCallout
+                ScanPlaceRow(place: place, before: { dismiss() })
                 HStack(spacing: 8) {
                     Button {
                         dismiss()

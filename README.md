@@ -54,6 +54,7 @@ The app follows the mockup's designs one to one, so these shots of the mockup sh
 - **Check in with the real camera.** The back camera takes the place, then it flips to the front for you, BeReal style. Rewards match the mockup: +100 coins and +20 XP, +150 more for the first explorer anywhere on Odyssey, quests on top, and +50 more at a place Explore recommended.
 - **The whole world is the map.** Wherever you walk, the hexes of a fixed world grid along your path turn blue, like a footprints map; car rides and GPS jumps do not count, and Settings can keep recording in the background. Walking past a place explores it, but it only becomes yours when you check in with a photo. Every shop, cafe, park and museum around you comes from Apple Maps points of interest and OpenStreetMap together, and when you reach one a card shows which friends have been there with a Check in button. Directions hand off to Apple Maps.
 - **Streaks with Globie.** One check-in a day keeps the streak. Every first check-in powers Globie up, and milestones at 10, 25, 50, 100 days and on turn Globie into a new form with a badge, a frame and a banner.
+- **3D scans.** The + button films a slow walk through the place you are at (found by GPS). The video goes to Convex, a render computer turns it into a 3D space with the people taken out, and the place lists it as a 3D space: a thumb stick to walk, drag to look. A place can have several spaces, each named by the explorer who filmed it, and only that explorer can rename or delete theirs. While it is being built, the place shows what the render computer is doing.
 - **Walkthroughs.** An optional short video after a check-in, recorded with consent. The phone reads a few frames with Apple's Vision framework to learn whether a place feels quiet or lively, which feeds recommendations.
 - **Explore.** An endless deck of picks ranked by your taste, with All, Be first, Close by, a category menu and a search bar that suggests from over a thousand things to do and eat. Swipe right or left and Odyssey learns your taste; star a place to pin it on your map. What Odyssey knows about you has its own page.
 - **Business bounties.** Businesses post a pool for walkthroughs of a place or an area, paid per video or split evenly; explorers see them in the feed and on the map and get paid in bounty cash, which also buys gift cards.
@@ -76,6 +77,34 @@ The app follows the mockup's designs one to one, so these shots of the mockup sh
 The **Widgets** section on the profile tab shows live previews of all of them. Each one has an editor for its style (light, dark, your streak form's colors, or a photo) and details, and changes reach the home screen right away. iOS only lets people place widgets themselves, so the app walks through adding them.
 
 The **adventure Live Activity** starts when you head to a place. It counts the distance down on the Lock Screen and in the Dynamic Island around the camera, switches to "You're here" when you arrive, and shows the coins and streak once you check in. The widgets gallery has a button to try it with today's adventure.
+
+## 3D scans
+
+A scan goes phone, Convex, render computer, Convex, phone. Nothing talks to the phone directly.
+
+1. **Phone.** `Odyssey/Features/Scan` records with the 0.5x camera (or takes a video from the library), re-encodes it as 1080p HEVC, uploads it to Convex storage and creates a row in `scans`.
+2. **Convex.** `convex/scans.ts` holds the queue and each scan's status, message and progress.
+3. **Render computer.** `tools/scan-worker/worker.py` runs on a Mac with Apple silicon. It claims the next scan, takes 6 frames a second from the video, masks out people (Apple Vision), solves the camera path (COLMAP), trains a Gaussian splat (Brush), levels the floor and uploads a 10 MB model. A 90 second video takes about 15 minutes.
+4. **Phone.** The place lists the space by its name. The model is downloaded once and drawn by a small WebGL page inside the app.
+
+Run a render computer:
+
+```
+brew install ffmpeg colmap
+python3 tools/scan-worker/worker.py
+```
+
+Scans currently live on their own Convex dev deployment (`ScanConfig` in `ScanService.swift`, `CONVEX_URL` in the worker), because two people pushing to one dev deployment overwrite each other's functions. Once `convex/scans.ts` is deployed with everything else, point both at the main deployment.
+
+### What the videos say about the building
+
+While a scan renders, the worker also sends about 24 frames of the video to Convex, and `convex/scanAnalysis.ts` asks Claude what they show: stairs, steps, ramps, lifts, doors, restrooms, seating, counters, signs. Each feature is marked as a barrier, a help or neutral for a wheelchair user, and as clearly seen or only likely. The scan also gets a wheelchair verdict for what it covers, and "unknown" is a normal answer when the video never shows the entrance.
+
+A place combines its scans: the worst verdict wins, so one video of stairs at the door outweighs another of a level room. The place page lists the features, and the 3D view shows them as labels near where they were filmed (a rough spot, taken from the frame they showed best in). Everything is presented as seen in a video and read by AI, not as checked by a person.
+
+It needs `ANTHROPIC_API_KEY` set on the Convex deployment (`npx convex env set ANTHROPIC_API_KEY ...`). Scans rendered before this existed can be read without rendering again: `python3 tools/scan-worker/worker.py --analyze <scan id>`.
+
+Filming tips that decide whether a scan works: walk slowly, turn slowly (a quick turn is where the 3D build loses track and everything after it is dropped), and film the room rather than people.
 
 ## Getting started
 

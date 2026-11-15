@@ -62,6 +62,8 @@ struct CoverView: View {
         case .globe: GlobeView()
         case .exploredMap(let focus): ExploredMapView(focus: focus)
         case .countryScene: CountrySceneView()
+        case .scan(let id): ScanFlow(placeID: id)
+        case .scanViewer(let id): ScanViewerView(scanID: id)
         }
     }
 }
