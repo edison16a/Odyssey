@@ -28,6 +28,7 @@ struct ExploreTab: View {
     @State private var gemPops = 0
     /// Bumped each time you land on another place, for the first-time hints.
     @State private var moves = 0
+    @State private var coach = ExploreCoachMarks.Phase.swipe
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -53,9 +54,11 @@ struct ExploreTab: View {
         .background(Palette.ink.ignoresSafeArea())
         .overlay {
             // The hints wait for real places, since they are tried on them.
-            if !store.state.tipsSeen.contains(Self.tipKey), !visible.isEmpty, router.path(.explore).isEmpty {
-                ExploreCoachMarks(moves: moves, saves: gemPops) {
+            if !store.state.tipsSeen.contains(Self.tipKey), !visible.isEmpty {
+                ExploreCoachMarks(moves: moves, saves: gemPops, phase: $coach) {
                     store.update { $0.tipsSeen.append(Self.tipKey) }
+                    // Ready for a replay of onboarding.
+                    coach = .swipe
                 }
                 .padding(.bottom, Self.tabBarHeight)
                 .transition(.opacity)

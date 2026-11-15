@@ -16,11 +16,12 @@ struct ExploreCoachMarks: View {
     var moves: Int
     /// Bumped on every fresh save.
     var saves: Int
+    /// Kept by the feed, so the lesson carries on after a detour to a place page.
+    @Binding var phase: Phase
     var onDone: () -> Void
 
-    private enum Phase { case swipe, save, saved }
+    enum Phase { case swipe, save, saved }
 
-    @State private var phase: Phase = .swipe
     @State private var shown = false
 
     var body: some View {
