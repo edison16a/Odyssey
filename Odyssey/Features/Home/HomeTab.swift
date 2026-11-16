@@ -99,14 +99,14 @@ struct HomeRewardsHeader: View {
         let rank = store.rank()
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                IconButton(icon: "users", kind: .white, label: "Friends") { router.push(.friends) }
-                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") { router.push(.notifications) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(greeting).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
                     Text(store.state.user.name.split(separator: " ").first.map(String.init) ?? "Explorer")
                         .font(.system(size: 26, weight: .heavy)).tracking(-0.6).foregroundStyle(Palette.ink)
                 }
                 Spacer()
+                IconButton(icon: "users", kind: .white, label: "Friends") { router.push(.friends) }
+                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") { router.push(.notifications) }
             }
             HStack(spacing: 8) {
                 pill(action: { router.push(.shop(nil)) }) {
@@ -238,7 +238,7 @@ struct HomeAdventureHero: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     Haptics.tap()
-                    if done { router.push(.place(pick.place.id)) } else { router.present(.checkIn(placeID: pick.place.id)) }
+                    if done { router.push(.place(pick.place.id)) } else { router.present(.adventure(placeID: pick.place.id)) }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: done ? "map" : "play.fill").font(.system(size: 15, weight: .bold))

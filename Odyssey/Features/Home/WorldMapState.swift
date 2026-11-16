@@ -33,11 +33,14 @@ final class WorldMapState {
         fly(to: place.coords)
     }
 
-    func fit(_ coords: [Coord]) {
+    /// Frame every coordinate. `bottomRoom` adds empty map below (as a share of the height)
+    /// so a panel over the bottom of the map doesn't cover any of them.
+    func fit(_ coords: [Coord], bottomRoom: Double = 0) {
         guard let first = coords.first else { return }
         var rect = MKMapRect(origin: MKMapPoint(first.location), size: MKMapSize(width: 1, height: 1))
         for coord in coords { rect = rect.union(MKMapRect(origin: MKMapPoint(coord.location), size: MKMapSize(width: 1, height: 1))) }
         let padding = max(800, max(rect.width, rect.height) * 0.25)
+        rect.size.height += (rect.height + padding * 2) * bottomRoom
         withAnimation { position = .rect(rect.insetBy(dx: -padding, dy: -padding)) }
     }
 
