@@ -82,7 +82,8 @@ struct CheckInFlow: View {
                     WalkthroughRecorder(place: place) { seconds, video, simulated in
                         recorded(Clip(seconds: seconds, video: video, simulated: simulated))
                     }
-                    .overlay(alignment: .top) { CheckInRewardOverlay(place: place).padding(.top, 50) }
+                    // Coming from a place, the adventure page already laid out the rewards.
+                    .overlay(alignment: .top) { if placeID == nil { CheckInRewardOverlay(place: place).padding(.top, 50) } }
                 case .pick:
                     CheckInPickStep { chosen in choose(chosen) }
                 default:

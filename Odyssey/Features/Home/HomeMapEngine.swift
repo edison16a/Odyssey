@@ -393,7 +393,8 @@ final class HomeMapMarkerView: MKAnnotationView {
             pad = 14
             key = "bounty|\(Format.money(bounty.pool))"
             picture = { Self.draw(BountyMapTag(bounty: bounty), pad: 14, scale: scale) }
-            zPriority = MKAnnotationViewZPriority(rawValue: 200)
+            // Above the pins, so the amount is never hidden behind a place's name.
+            zPriority = MKAnnotationViewZPriority(rawValue: 500)
             alpha = 1
             isEnabled = true
             accessibilityLabel = bounty.sponsor
@@ -413,6 +414,10 @@ final class HomeMapMarkerView: MKAnnotationView {
             centerOffset = CGPoint(x: size.width / 2 - (pad + pinSide / 2), y: 0)
             // A full 44 point target around the pin.
             touch = CGRect(x: pad + pinSide / 2 - 22, y: size.height / 2 - 22, width: 44, height: 44)
+        } else if case .bounty = mark.content {
+            // Float the tag above its spot, so it doesn't sit on the place pin there.
+            centerOffset = CGPoint(x: 0, y: -(size.height / 2 - pad + 20))
+            touch = CGRect(origin: .zero, size: size).insetBy(dx: pad - 4, dy: pad - 4)
         } else {
             centerOffset = .zero
             touch = isEnabled ? CGRect(origin: .zero, size: size).insetBy(dx: pad - 4, dy: pad - 4) : .zero

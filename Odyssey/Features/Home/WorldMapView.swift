@@ -11,40 +11,61 @@ struct WorldMapView: View {
     @State private var bounty: Bounty?
     @State private var amenity: AmenityPoint?
     @State private var showInfo = false
-    @State private var showNearby = false
     @State private var showBounties = false
+    /// The Home preview keeps its own camera, zoom and layers. Sharing the World Map's made
+    /// the two maps (one hidden in another tab) keep moving and re-zooming each other.
+    @State private var previewPosition: MapCameraPosition = .automatic
+    @State private var previewZoom = 14
+    @State private var previewAmenities: Set<String> = []
+    /// The Find nearby chip that is on, if any.
+    @State private var activeCategory: NearbyCategory?
     @State private var locating = false
     @State private var finding = false
     @State private var locationError: String?
     @State private var nearbyTask: Task<Void, Never>?
     @State private var nearbyRequestID = UUID()
+    /// Verified Odyssey amenities found by the last Find nearby, shown with Apple's results.
+    @State private var nearbyAmenities: [AmenityPoint] = []
+    @State private var nearbySort: NearbySort = .distance
+    /// The result card scrolled into view, which the map follows.
+    @State private var nearbyFocus: String?
 
     var body: some View {
         @Bindable var map = store.worldMap
         ZStack {
-            HomeMapView(position: $map.position, zoom: $map.zoom, filter: "all", onPick: pick,
-                        onBounty: { bounty = $0 }, amenities: map.amenityKinds,
-                        onAmenity: { amenity = $0 }, destinations: map.results,
-                        selectedDestination: map.selectedPlace,
-                        onCamera: { if !paused { map.region = $0 } })
+            HomeMapView(position: isPreview ? $previewPosition : $map.position,
+                        zoom: isPreview ? $previewZoom : $map.zoom, filter: "all", onPick: pick,
+                        onBounty: { bounty = $0 }, amenities: isPreview ? previewAmenities : map.amenityKinds,
+                        onAmenity: { amenity = $0 }, destinations: isPreview ? [] : map.results,
+                        selectedDestination: isPreview ? nil : map.selectedPlace,
+                        onCamera: { if !isPreview && !paused { map.region = $0 } })
+                // Full screen: the map runs under the status bar and the tab bar.
+                .ignoresSafeArea(edges: isPreview ? [] : .all)
             if isPreview {
                 VStack {
-                    HomeAmenityChips(kinds: $map.amenityKinds).padding(.top, 10)
+                    HomeAmenityChips(kinds: $previewAmenities).padding(.top, 10)
                     Spacer()
                     HStack { HomeFootprintChip(); Spacer(); HomeMapLegend() }.padding(10)
                 }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if !isPreview { top.padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8) }
+        // Controls float over the map instead of insetting it, so the map fills the screen.
+        .overlay(alignment: .top) {
+            if !isPreview { top.padding(.horizontal, 12).padding(.top, 6) }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if !isPreview { bottom.padding(.horizontal, 12).padding(.bottom, 82) }
         }
         .background(Palette.surface)
         .onAppear {
-            map.initialize(store: store)
-            if !isPreview { applyFocus(router.worldMapFocus) }
+            if isPreview {
+                guard previewPosition == .automatic else { return }
+                let center = store.demoFocus ?? store.deviceLocation ?? store.home.center
+                previewPosition = .camera(MapCamera(centerCoordinate: center.location, distance: 1500, heading: 20, pitch: 55))
+            } else {
+                map.initialize(store: store)
+                applyFocus(router.worldMapFocus)
+            }
         }
         .onChange(of: router.worldMapFocus) { _, focus in
             guard !isPreview else { return }
@@ -79,7 +100,6 @@ struct WorldMapView: View {
             AmenitySheet(point: point).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showInfo) { BountyInfoSheet() }
-        .sheet(isPresented: $showNearby) { nearbyMenu }
         .sheet(isPresented: $showBounties) { bountyList }
         .alert("Location unavailable", isPresented: Binding(get: { locationError != nil }, set: { if !$0 { locationError = nil } })) {
             if location.isDenied {
@@ -91,97 +111,201 @@ struct WorldMapView: View {
         } message: { Text(locationError ?? "Please try again outdoors.") }
     }
 
-    private var top: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Button { router.present(.setBounty(placeID: store.worldMap.selectedPlace?.id)) } label: {
-                    Label("Set Bounty", systemImage: "target").font(.system(size: 14, weight: .bold))
-                        .padding(.horizontal, 16).frame(minHeight: 46)
-                        .foregroundStyle(.white).background(Palette.accent, in: Capsule())
-                }
-                .accessibilityIdentifier("worldMap.setBounty")
-                Button { showInfo = true } label: {
-                    Image(systemName: "info.circle").font(.title3).frame(width: 44, height: 44)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel("What are bounties?")
-                Spacer()
-                Button { showBounties = true } label: {
-                    Image(systemName: "gift").font(.title3).frame(width: 44, height: 44)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel("View available bounties")
-            }
-            LocationSearchField(search: store.worldMap.search) { place in
-                store.worldMap.clearNearby()
-                pick(place)
-            }
-        }
+    private var searchOpen: Bool {
+        let search = store.worldMap.search
+        return !search.query.isEmpty || !search.results.isEmpty || search.error != nil
     }
 
-    private var bottom: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let title = store.worldMap.nearbyTitle {
-                HStack {
-                    Text(title).font(.caption.weight(.semibold))
-                    Spacer()
-                    Button("Clear") { nearbyTask?.cancel(); store.worldMap.clearNearby() }
+    private var top: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                LocationSearchField(search: store.worldMap.search) { place in
+                    clearNearby()
+                    pick(place)
                 }
-                .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                roundButton("gift.fill", badge: store.openBounties.count, label: "View available bounties") {
+                    showBounties = true
+                }
             }
-            HStack(alignment: .bottom) {
-                Button { showNearby = true } label: {
-                    Label(finding ? "Searching…" : "Find Nearby", systemImage: "binoculars.fill")
-                        .font(.system(size: 14, weight: .bold)).padding(.horizontal, 16).frame(minHeight: 48)
-                        .background(.regularMaterial, in: Capsule())
-                }
-                .accessibilityIdentifier("worldMap.findNearby")
-                Spacer()
-                VStack(spacing: 8) {
-                    Button {
-                        let center = store.worldMap.region?.center ?? store.home.center.location
-                        let current = store.worldMap.position.camera
-                        withAnimation {
-                            store.worldMap.position = .camera(MapCamera(centerCoordinate: center,
-                                distance: current?.distance ?? 1500, heading: current?.heading ?? 0,
-                                pitch: (current?.pitch ?? 0) > 10 ? 0 : 60))
+            if !searchOpen {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Button {
+                            Haptics.tap()
+                            router.present(.setBounty(placeID: store.worldMap.selectedPlace?.id))
+                        } label: {
+                            Label("Set bounty", systemImage: "target")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14).frame(height: 38)
+                                .background(Palette.accent, in: Capsule())
+                                .shadow(color: Palette.accent.opacity(0.3), radius: 8, y: 3)
                         }
-                    } label: { Text("3D").font(.system(size: 14, weight: .bold)).frame(width: 48, height: 48).background(.regularMaterial, in: Circle()) }
-                    .accessibilityLabel("Toggle 3D map")
-                    Button { Task { await recenter() } } label: {
-                        Group {
-                            if locating { ProgressView() } else { Image(systemName: "location.fill").font(.title3) }
+                        .buttonStyle(PressStyle(scale: 0.95))
+                        .accessibilityIdentifier("worldMap.setBounty")
+                        Button { showInfo = true } label: {
+                            Image(systemName: "questionmark")
+                                .font(.system(size: 13, weight: .heavy))
+                                .frame(width: 38, height: 38)
+                                .background(.regularMaterial, in: Circle())
                         }
-                        .frame(width: 48, height: 48).background(.regularMaterial, in: Circle())
+                        .buttonStyle(PressStyle(scale: 0.9))
+                        .accessibilityLabel("What are bounties?")
+                        ForEach(NearbyCategory.allCases) { category in
+                            if category != .accessible || hasAccessibleData { nearbyChip(category) }
+                        }
                     }
-                    .disabled(locating)
-                    .accessibilityLabel("Current Location")
-                    .accessibilityIdentifier("worldMap.currentLocation")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
                 }
+                .padding(.horizontal, -12)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .foregroundStyle(Palette.ink)
+        .animation(.snappy(duration: 0.22), value: searchOpen)
     }
 
-    private var nearbyMenu: some View {
-        NavigationStack {
-            List {
-                ForEach(NearbyCategory.allCases) { category in
-                    if category != .accessible || hasAccessibleData {
-                        Button {
-                            showNearby = false
-                            nearbyTask?.cancel()
-                            nearbyTask = Task { await find(category) }
-                        } label: { Label(category.title, systemImage: category.icon) }
+    private func nearbyChip(_ category: NearbyCategory) -> some View {
+        let on = activeCategory == category
+        return Button {
+            Haptics.tap()
+            nearbyTask?.cancel()
+            if on {
+                clearNearby()
+            } else {
+                activeCategory = category
+                nearbyTask = Task { await find(category) }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if on && finding {
+                    ProgressView().controlSize(.mini).tint(.white)
+                } else {
+                    Image(systemName: category.icon).font(.system(size: 12, weight: .bold))
+                }
+                Text(category.short).font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(on ? .white : Palette.ink)
+            .padding(.horizontal, 14).frame(height: 38)
+            .background { if on { Capsule().fill(Palette.ink) } else { Capsule().fill(.regularMaterial) } }
+            .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        }
+        .buttonStyle(PressStyle(scale: 0.95))
+        .accessibilityLabel(category.title)
+    }
+
+    private func roundButton(_ icon: String, badge: Int = 0, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 50, height: 50)
+                .background(.regularMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                .overlay(alignment: .topTrailing) {
+                    if badge > 0 {
+                        Text("\(badge)")
+                            .font(.system(size: 11, weight: .heavy)).monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5).frame(minWidth: 20, minHeight: 20)
+                            .background(Palette.danger, in: Capsule())
+                            .offset(x: 4, y: -4)
                     }
                 }
-                Text("Searches around the map's visible center. Amenity details depend on available source data; confirm access on arrival.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .navigationTitle("Find Nearby").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showNearby = false } } }
         }
-        .presentationDetents([.medium, .large])
+        .buttonStyle(PressStyle(scale: 0.92))
+        .accessibilityLabel(label)
+    }
+
+    private var showsTray: Bool { activeCategory != nil && store.worldMap.nearbyTitle != nil && !finding }
+
+    private var nearbyResults: [NearbyHit] {
+        let icon = activeCategory?.icon ?? "mappin"
+        var list = nearbyAmenities.map(NearbyHit.init(amenity:))
+            + store.worldMap.results.map { NearbyHit(place: $0, icon: icon) }
+        let here = store.here
+        switch nearbySort {
+        case .distance:
+            list.sort { $0.coord.distance(to: here) < $1.coord.distance(to: here) }
+        case .rating:
+            // Rated places first, best first; unrated ones after, nearest first.
+            list.sort { ($0.rating ?? -1, -$0.coord.distance(to: here)) > ($1.rating ?? -1, -$1.coord.distance(to: here)) }
+        }
+        return list
+    }
+
+    private var bottom: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            VStack(spacing: 0) {
+                Button(action: toggle3D) {
+                    Text(is3D ? "2D" : "3D").font(.system(size: 14, weight: .heavy))
+                        .frame(width: 50, height: 50)
+                }
+                .accessibilityLabel("Toggle 3D map")
+                Divider().frame(width: 30)
+                Button { Task { await recenter() } } label: {
+                    Group {
+                        if locating { ProgressView().controlSize(.small) } else { Image(systemName: "location.fill").font(.system(size: 17, weight: .semibold)) }
+                    }
+                    .frame(width: 50, height: 50)
+                }
+                .disabled(locating)
+                .accessibilityLabel("Current Location")
+                .accessibilityIdentifier("worldMap.currentLocation")
+            }
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            if showsTray, let category = activeCategory {
+                NearbyResultsTray(title: category.title, icon: category.icon, results: nearbyResults,
+                                  sort: $nearbySort, focused: $nearbyFocus,
+                                  onOpen: openResult, onGo: { NearbyService.directions(to: $0.destination) },
+                                  onClose: clearNearby)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .foregroundStyle(Palette.ink)
+        .animation(.snappy(duration: 0.25), value: showsTray)
+        .onChange(of: nearbyFocus) { _, id in
+            guard let id, let result = nearbyResults.first(where: { $0.id == id }) else { return }
+            if case .place(let place) = result.source { store.worldMap.selectedPlace = place }
+            store.worldMap.fly(to: result.coord, distance: 1400)
+        }
+        .onChange(of: nearbySort) { nearbyFocus = nil }
+    }
+
+    private func openResult(_ result: NearbyHit) {
+        Haptics.tap()
+        switch result.source {
+        case .place(let place): pick(place)
+        case .amenity(let point):
+            store.worldMap.fly(to: point.coord, distance: 1200)
+            amenity = point
+        }
+    }
+
+    private var is3D: Bool { (store.worldMap.position.camera?.pitch ?? 55) > 10 }
+
+    private func toggle3D() {
+        Haptics.tap()
+        let center = store.worldMap.region?.center ?? store.home.center.location
+        let current = store.worldMap.position.camera
+        withAnimation(.easeInOut(duration: 0.5)) {
+            store.worldMap.position = .camera(MapCamera(centerCoordinate: center,
+                distance: current?.distance ?? 1500, heading: current?.heading ?? 0,
+                pitch: is3D ? 0 : 60))
+        }
+    }
+
+    private func clearNearby() {
+        nearbyTask?.cancel()
+        activeCategory = nil
+        finding = false
+        nearbyAmenities = []
+        nearbyFocus = nil
+        store.worldMap.selectedPlace = nil
+        store.worldMap.clearNearby()
     }
 
     private var hasAccessibleData: Bool {
@@ -247,7 +371,9 @@ struct WorldMapView: View {
         defer { if nearbyRequestID == requestID { finding = false } }
         let center = store.worldMap.region.map { Coord($0.center) } ?? store.home.center
         store.worldMap.clearNearby()
-        let known = store.amenityPoints.filter { $0.verified && $0.kind == category.rawValue && $0.coord.distance(to: center) < 5000 }
+        nearbyAmenities = []
+        nearbyFocus = nil
+        let known = store.amenityPoints.filter { $0.kind == category.rawValue && $0.coord.distance(to: center) < 5000 }
         if category == .accessible {
             let places = store.osmPlaces.values.filter {
                 $0.tags?["entrance"] != nil && $0.tags?["wheelchair"] == "yes" && $0.coords.distance(to: center) < 5000
@@ -271,10 +397,15 @@ struct WorldMapView: View {
         }
         guard !Task.isCancelled else { return }
         store.worldMap.amenityKinds = [category.rawValue]
-        let coords = store.worldMap.results.map(\.coords) + known.map(\.coord)
-        store.worldMap.nearbyTitle = coords.isEmpty ? "No nearby results for \(category.title)" : "\(category.title) · \(coords.count) results"
+        // Keep the 30 closest, like a maps app, and frame the closest few so the
+        // overview opens on what's actually near you rather than the whole city.
         store.worldMap.results.sort { $0.coords.distance(to: center) < $1.coords.distance(to: center) }
-        store.worldMap.fit(coords)
+        store.worldMap.results = Array(store.worldMap.results.prefix(30))
+        nearbyAmenities = Array(known.sorted { $0.coord.distance(to: center) < $1.coord.distance(to: center) }.prefix(30))
+        let coords = (store.worldMap.results.map(\.coords) + nearbyAmenities.map(\.coord))
+            .sorted { $0.distance(to: center) < $1.distance(to: center) }
+        store.worldMap.nearbyTitle = coords.isEmpty ? "No nearby results for \(category.title)" : "\(category.title) · \(coords.count) results"
+        store.worldMap.fit(Array(coords.prefix(6)) + [center], bottomRoom: 0.9)
     }
 }
 
@@ -291,6 +422,19 @@ enum NearbyCategory: String, CaseIterable, Identifiable {
         case .study: return "Study Spaces"
         case .seating: return "Cafés with Seating"
         case .accessible: return "Accessible Entrances"
+        }
+    }
+    /// The label on the chip over the map.
+    var short: String {
+        switch self {
+        case .bathroom: return "Bathrooms"
+        case .parking: return "Parking"
+        case .wifi: return "Wi-Fi"
+        case .water: return "Water"
+        case .elevator: return "Elevators"
+        case .study: return "Study"
+        case .seating: return "Cafés"
+        case .accessible: return "Accessible"
         }
     }
     var query: String {
