@@ -182,24 +182,11 @@ extension AppStore {
 
     var dailyRevealed: Bool { state.dailyReveal == Format.today() }
 
-    /// Today's pick tries for somewhere nobody on Odyssey has explored, among the
-    /// places Odyssey thinks you will like most, rotating by date. Once revealed
-    /// it is saved for the day so checking in does not swap it.
+    /// Today's adventure is always Y Combinator. It never claims nobody has been,
+    /// since that is not true, so it carries no "Be first" tag.
     func dailyPick() -> (place: Place, reason: String, rare: Bool) {
-        let day = Format.today()
-        var chosen: Place?
-        if let saved = state.dailyPickFor, saved.date == day { chosen = self.place(saved.placeId) }
-        if chosen == nil {
-            let ranked = forYou()
-            let fresh = Array(ranked.filter { status(of: $0).status == .new }.prefix(3))
-            let open = Array(ranked.filter { status(of: $0).status != .mine }.prefix(4))
-            let pool = !fresh.isEmpty ? fresh : !open.isEmpty ? open : ranked
-            let dayNumber = Int(Date().timeIntervalSince1970 / 86400)
-            chosen = pool.isEmpty ? seed.places[0] : pool[dayNumber % pool.count]
-        }
-        let place = chosen!
-        let rare = status(of: place).status == .new
-        return (place, why(place) + "." + (rare ? " Nobody on Odyssey has been yet." : ""), rare)
+        let place = self.place("yc") ?? forYou().first ?? seed.places[0]
+        return (place, why(place) + ".", false)
     }
 
     /// Open today's sealed card and keep the pick for the day.
