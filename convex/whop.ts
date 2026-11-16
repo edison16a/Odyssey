@@ -53,8 +53,8 @@ export const quote = query({
 export const createBountyCheckout = action({
   args: { bounty: v.any() },
   handler: async (ctx, { bounty }): Promise<{ bountyId: string; checkoutId: string; url: string; amount: number; sandbox: boolean }> => {
-    const ownerId = await getAuthUserId(ctx);
-    if (!ownerId) throw new Error("Not signed in");
+    // Guests can pay too. Their bounty has no owner; the random bountyId is what lets them check on it.
+    const ownerId = (await getAuthUserId(ctx)) ?? undefined;
     const data = normalizeBounty(bounty);
     const requestId = typeof bounty.id === "string" && bounty.id !== "draft" && bounty.id.length <= 120 ? bounty.id : crypto.randomUUID();
     const { account, product } = await accountAndProduct();
@@ -86,7 +86,7 @@ export const createBountyCheckout = action({
 
 /** Reserve first, atomically: concurrent requests for the same draft share one pending row. */
 export const reserveCheckout = internalMutation({
-  args: { ownerId: v.id("users"), requestId: v.string(), data: v.any(), accountId: v.string(), sandbox: v.boolean() },
+  args: { ownerId: v.optional(v.id("users")), requestId: v.string(), data: v.any(), accountId: v.string(), sandbox: v.boolean() },
   handler: async (ctx, a) => {
     const prior = await ctx.db.query("bountyCheckouts").withIndex("by_owner_request", (q) => q.eq("ownerId", a.ownerId).eq("requestId", a.requestId)).unique();
     const data = normalizeBounty(a.data);
@@ -154,10 +154,10 @@ export const pending = internalQuery({
 export const bountyStatus = query({
   args: { bountyId: v.string() },
   handler: async (ctx, { bountyId }) => {
+    // Signed in: only your own checkouts. Guest: only checkouts without an owner.
     const ownerId = await getAuthUserId(ctx);
-    if (!ownerId) throw new Error("Not signed in");
     const row = await ctx.db.query("bountyCheckouts").withIndex("by_bountyId", (q) => q.eq("bountyId", bountyId)).unique();
-    if (!row || (row.ownerId && row.ownerId !== ownerId)) return { status: "missing", bounty: null };
+    if (!row || (row.ownerId !== undefined && row.ownerId !== ownerId)) return { status: "missing", bounty: null };
     return { status: row.status, bounty: row.status === "paid" ? {
       ...row.data, paidWith: "whop", expiresAt: expiryFor(row.data, row.paidAt ?? row.createdAt),
     } : null };
@@ -169,9 +169,8 @@ export const syncBounty = action({
   args: { bountyId: v.string() },
   handler: async (ctx, { bountyId }): Promise<{ status: string }> => {
     const ownerId = await getAuthUserId(ctx);
-    if (!ownerId) throw new Error("Not signed in");
     const row = await ctx.runQuery(internal.whop.pending, { bountyId });
-    if (!row || (row.ownerId && row.ownerId !== ownerId)) return { status: "missing" };
+    if (!row || (row.ownerId !== undefined && row.ownerId !== ownerId)) return { status: "missing" };
     if (row.status === "paid") return { status: "paid" };
     if (!row.checkoutId) return { status: "pending" };
     const { account } = await accountAndProduct();
