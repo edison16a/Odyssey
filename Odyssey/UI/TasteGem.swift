@@ -68,7 +68,13 @@ struct TasteGem: Equatable {
         }
         // Everyone starts as a Cafe Hopper; saves and check-ins can grow other tastes past it.
         score["coffee", default: 0] += 2.5
-        let top = score.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(3).map(\.key)
+        // Ties break the same way every time (Cafe Hopper first, then by name), so the
+        // type never changes between launches just because dictionary order did.
+        let top = score.filter { $0.value > 0 }.sorted {
+            if $0.value != $1.value { return $0.value > $1.value }
+            if ($0.key == "coffee") != ($1.key == "coffee") { return $0.key == "coffee" }
+            return $0.key < $1.key
+        }.prefix(3).map(\.key)
         let likes = store.state.taste.votes.values.filter { $0.v > 0 }.count
         guard let first = top.first, let main = kinds[first] else {
             return TasteGem(colors: [Palette.accent, Color(hex: "#8a5cff"), Color(hex: "#18a85c")],
