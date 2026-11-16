@@ -288,7 +288,7 @@ struct ScanRecorder: View {
             }
         }
         .task {
-            if camera.isAvailable { await camera.start(side: .back, video: true, ultraWide: true) }
+            if camera.isAvailable { await camera.start(ultraWide: true) }
         }
         .onDisappear { camera.stop() }
         .onChange(of: picked) { _, item in

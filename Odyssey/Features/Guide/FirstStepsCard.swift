@@ -2,8 +2,8 @@
 //  FirstStepsCard.swift
 //  Odyssey
 //
-//  The card at the top of Home for a new explorer: four first steps, the
-//  one to do next, and a welcome bonus when all four are done. Tapping it
+//  The card at the top of Home for a new explorer: three first steps, the
+//  one to do next, and a welcome bonus when all three are done. Tapping it
 //  does not explain the step, it takes you there and lights up the button.
 //
 
@@ -103,7 +103,6 @@ struct FirstStepsCard: View {
         switch step {
         case .tour: guide.startWelcome(store: store)
         case .save: guide.startExplore()
-        case .checkIn: guide.startCheckIn(store: store)
         case .friend: guide.startFriend()
         }
     }
@@ -115,7 +114,7 @@ struct FirstStepsCard: View {
         rewardPop.show(RewardPopModel(
             icon: "trophy", color: "#f2b21b", eyebrow: "First steps complete",
             title: "You are an explorer now",
-            sub: "One check-in a day keeps your streak alive.",
+            sub: "Keep exploring to grow your streak and rank.",
             stats: [.init(glyph: "coin", label: "Welcome bonus", value: "+\(coins)", color: "#f2b21b")],
             done: "Let's go"))
     }

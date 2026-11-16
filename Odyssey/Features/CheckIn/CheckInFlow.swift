@@ -134,7 +134,7 @@ struct CheckInFlow: View {
         LiveActivityService.shared.captured()
         ownsActivity = true
         withAnimation(.easeInOut(duration: 0.3)) { stage = .saving }
-        let outcome = store.checkIn(place, caption: "Exploring \(place.name).", photoFile: nil, selfieFile: nil)
+        let outcome = store.checkIn(place, caption: "Exploring \(place.name).")
         result = outcome
         Task {
             // Too far from the place: the video is still kept, but it pays nothing either.

@@ -3,15 +3,15 @@
 //  Odyssey
 //
 //  The first steps a new explorer takes after onboarding: the tour, a saved
-//  place, a friend and the first check-in. Each one is ticked off wherever
-//  it happens in the app, and finishing all four pays a welcome bonus.
+//  place and a friend. Each one is ticked off wherever it happens in the
+//  app, and finishing all three pays a welcome bonus.
 //  Progress lives in tipsSeen, so a save from an older build still opens.
 //
 
 import Foundation
 
 enum FirstStep: String, CaseIterable, Identifiable {
-    case tour, save, friend, checkIn
+    case tour, save, friend
 
     var id: String { rawValue }
 
@@ -20,7 +20,6 @@ enum FirstStep: String, CaseIterable, Identifiable {
         case .tour: return "Take the quick tour"
         case .save: return "Save a place you like"
         case .friend: return "Add a friend"
-        case .checkIn: return "Check in at your first place"
         }
     }
 
@@ -29,7 +28,6 @@ enum FirstStep: String, CaseIterable, Identifiable {
         case .tour: return "See how Home works."
         case .save: return "Open Explore and double tap a place."
         case .friend: return "Explore together for 2x coins."
-        case .checkIn: return "Go to today's adventure and tap Start."
         }
     }
 
@@ -38,7 +36,6 @@ enum FirstStep: String, CaseIterable, Identifiable {
         case .tour: return "sparkles"
         case .save: return "heart.fill"
         case .friend: return "person.2.fill"
-        case .checkIn: return "camera.fill"
         }
     }
 }
@@ -65,7 +62,7 @@ extension AppStore {
 
     var firstStepsDone: Int { FirstStep.allCases.filter(firstStepDone).count }
 
-    /// The step to do next, in order; nil once all four are done.
+    /// The step to do next, in order; nil once all three are done.
     var nextFirstStep: FirstStep? { FirstStep.allCases.first { !firstStepDone($0) } }
 
     /// The welcome tour still has to run (or was cut short by closing the app).
@@ -74,7 +71,7 @@ extension AppStore {
     /// Onboarding just ended: start the first steps from zero.
     func beginGuide() {
         update { s in
-            s.tipsSeen.removeAll { $0.hasPrefix("guide:") || $0.hasPrefix("tip:") || $0 == "explore-feed" }
+            s.tipsSeen.removeAll { $0.hasPrefix("guide:") || $0 == "explore-feed" }
             s.tipsSeen.append(AppStore.guideOn)
         }
     }
@@ -99,17 +96,5 @@ extension AppStore {
     func hideFirstSteps() {
         guard !state.tipsSeen.contains(AppStore.guideHidden) else { return }
         update { s in s.tipsSeen.append(AppStore.guideHidden) }
-    }
-
-    // MARK: One-time tips
-
-    /// A small hint next to a control, shown once while the guide is on.
-    func tipWanted(_ key: String) -> Bool {
-        guideOn && !state.tipsSeen.contains("tip:" + key)
-    }
-
-    func tipSeen(_ key: String) {
-        guard !state.tipsSeen.contains("tip:" + key) else { return }
-        update { s in s.tipsSeen.append("tip:" + key) }
     }
 }

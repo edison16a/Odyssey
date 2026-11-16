@@ -72,10 +72,10 @@ extension AppStore {
     }
 
     @discardableResult
-    func addPost(placeId: String, kind: String, caption: String, first: Bool, photoFile: String?, selfieFile: String?, seconds: Int? = nil) -> Post {
+    func addPost(placeId: String, kind: String, caption: String, first: Bool, seconds: Int? = nil) -> Post {
         let post = Post(id: "mine-\(Int(Date().timeIntervalSince1970 * 1000))", by: "me", placeId: placeId, kind: kind,
-                        minutesAgo: 0, selfie: nil, caption: caption, seconds: seconds, first: first, likes: 0, comments: 0,
-                        milestone: nil, day: nil, photoFile: photoFile, selfieFile: selfieFile, createdAt: Date())
+                        minutesAgo: 0, caption: caption, seconds: seconds, first: first, likes: 0, comments: 0,
+                        milestone: nil, day: nil, createdAt: Date())
         update { s in s.myPosts.insert(post, at: 0) }
         return post
     }

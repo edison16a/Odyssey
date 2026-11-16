@@ -306,7 +306,6 @@ private struct PlaceMainCard: View {
                 Label(done ? "Explored today" : "Check in", systemImage: done ? "checkmark" : "camera")
             }
             .buttonStyle(.pill(done ? .soft : .accent, fill: true))
-            .guideTip("place-checkin", "Here? Check in for +\(Rewards.checkIn.coins)", icon: "camera.fill", when: !done)
             Button {
                 Haptics.tap()
                 LiveActivityService.shared.start(place: place, store: store)

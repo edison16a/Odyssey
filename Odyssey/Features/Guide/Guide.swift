@@ -14,7 +14,7 @@ import SwiftUI
 
 /// A control a spotlight can land on.
 enum GuideSpot: String, Hashable {
-    case hero, start, stats, exploreTab, friends
+    case hero, stats, exploreTab, friends
 }
 
 /// One spotlight: where it lands, what Globie says and how it moves on.
@@ -33,8 +33,8 @@ struct GuideStep: Equatable {
     var text: String
     var advance: Advance = .next
     var button = "Next"
-    /// Shows a Directions button for this place next to the main one.
-    var directionsTo: String? = nil
+    /// What to do with the lit control on an action step.
+    var action = "Tap it"
     var mood: GlobieMood = .happy
 }
 
@@ -115,11 +115,17 @@ private struct GuideSpotModifier: ViewModifier {
 extension Guide {
     /// Right after onboarding: what Home is for, then on to Explore.
     func startWelcome(store: AppStore) {
+        // Today's place stays sealed until it is held open, so the tour starts by opening it.
+        let adventure = store.dailyRevealed
+            ? GuideStep(spot: .hero, tab: .home, title: "Today's adventure",
+                        text: "One place picked for you, every day, with the coins it pays.", mood: .ecstatic)
+            : GuideStep(spot: .hero, tab: .home, title: "Today's adventure",
+                        text: "One place picked for you, every day. Press and hold to reveal today's.",
+                        advance: .tapSpot, action: "Hold it", mood: .ecstatic)
         start([
-            GuideStep(spot: .hero, tab: .home, title: "Today's adventure",
-                      text: "One place picked for you, every day. Go there and tap Start to check in.", mood: .ecstatic),
+            adventure,
             GuideStep(spot: .stats, tab: .home, title: "Your rewards",
-                      text: "Coins, streak and rank. Every check-in grows all three."),
+                      text: "Coins, streak and rank. They grow as you explore."),
             GuideStep(spot: .exploreTab, tab: .home, title: "Find more places",
                       text: "Tap Explore to swipe through places near you.", advance: .tapSpot),
         ]) { store.completeFirstStep(.tour) }
@@ -131,18 +137,9 @@ extension Guide {
                          text: "Tap Explore, then double tap any place you would go to.", advance: .tapSpot)])
     }
 
-    /// How a check-in starts, on today's adventure.
-    func startCheckIn(store: AppStore) {
-        let place = store.dailyPick().place
-        let far = Format.distance(store.metres(to: place))
-        start([GuideStep(spot: .start, tab: .home, title: "Your first check-in",
-                         text: "Head to \(place.name), \(far) away. Once you are there, tap Start and film a quick look around.",
-                         button: "Got it", directionsTo: place.id)])
-    }
-
     /// The Friends button at the top of Home.
     func startFriend() {
         start([GuideStep(spot: .friends, tab: .home, title: "Bring a friend",
-                         text: "Your friends live here. Add one, check in together and you both earn 2x coins.", advance: .tapSpot)])
+                         text: "Your friends live here. Add one and explore together for 2x coins.", advance: .tapSpot)])
     }
 }

@@ -38,7 +38,6 @@ struct HomeTab: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                     HomeAdventureHero()
-                        .id("hero")
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
                     HomeExploredMapCard()
@@ -57,9 +56,7 @@ struct HomeTab: View {
             // A spotlight is about to land on Home: bring what it lights up into view.
             .onChange(of: guide.step) { _, step in
                 guard let step, step.tab == .home else { return }
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    if step.spot == .start { reader.scrollTo("hero", anchor: .center) } else { reader.scrollTo("top", anchor: .top) }
-                }
+                withAnimation(.easeInOut(duration: 0.3)) { reader.scrollTo("top", anchor: .top) }
             }
         }
         .background(Palette.surface)
@@ -197,6 +194,7 @@ struct HomeAdventureHero: View {
                 .transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity))
         } else {
             sealed
+                .guideSpot(.hero)
                 .transition(.opacity)
         }
     }
@@ -268,7 +266,6 @@ struct HomeAdventureHero: View {
                     .shadow(color: Palette.accent.opacity(done ? 0 : (glow ? 0.45 : 0.15)), radius: glow ? 14 : 6, y: 4)
                 }
                 .buttonStyle(PressStyle(scale: 0.97))
-                .guideSpot(.start)
             }
             .padding(14)
             .background(.white)

@@ -104,7 +104,6 @@ nonisolated struct Post: Codable, Identifiable, Hashable, Sendable {
     /// "visit", "walk", "milestone" or "day".
     var kind: String
     var minutesAgo: Int
-    var selfie: String?
     var caption: String
     var seconds: Int?
     var first: Bool?
@@ -112,9 +111,6 @@ nonisolated struct Post: Codable, Identifiable, Hashable, Sendable {
     var comments: Int
     var milestone: Milestone?
     var day: DayPost?
-    /// For the user's own posts: the photo files saved on this phone.
-    var photoFile: String?
-    var selfieFile: String?
     var createdAt: Date?
 }
 

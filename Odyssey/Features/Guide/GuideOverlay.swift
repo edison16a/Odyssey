@@ -46,6 +46,7 @@ struct GuideOverlay: View {
         .ignoresSafeArea()
         .onChange(of: router.tab) { passIfDone() }
         .onChange(of: router.paths) { passIfDone() }
+        .onChange(of: store.dailyRevealed) { passIfDone() }
     }
 
     /// Spotlights wait until their tab is showing with nothing on top of it.
@@ -57,6 +58,7 @@ struct GuideOverlay: View {
     private func passIfDone() {
         guard let step = guide.step, step.advance == .tapSpot else { return }
         switch step.spot {
+        case .hero: if store.dailyRevealed { guide.next() }
         case .exploreTab: if router.tab == .explore { guide.next() }
         case .friends: if !router.path(.home).isEmpty { guide.next() }
         default: break
@@ -67,7 +69,6 @@ struct GuideOverlay: View {
         switch spot {
         case .hero: return 6
         case .stats: return 8
-        case .start: return 8
         case .exploreTab: return 2
         case .friends: return 8
         }
@@ -108,8 +109,7 @@ struct GuideOverlay: View {
         let card = GuideBubble(step: step, index: guide.index, count: guide.steps.count, pointsUp: below,
                                pointerX: hole.midX,
                                next: { guide.next() },
-                               skip: { Haptics.tap(); guide.stop() },
-                               directions: directions(step))
+                               skip: { Haptics.tap(); guide.stop() })
         return VStack(spacing: 0) {
             if below {
                 Color.clear.frame(height: max(0, hole.maxY + 10))
@@ -124,16 +124,6 @@ struct GuideOverlay: View {
         .frame(width: size.width, height: size.height)
         .id(guide.index)
         .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: below ? .top : .bottom)))
-    }
-
-    private func directions(_ step: GuideStep) -> (() -> Void)? {
-        guard let id = step.directionsTo, let place = store.place(id) else { return nil }
-        return {
-            Haptics.tap()
-            guide.stop()
-            LiveActivityService.shared.start(place: place, store: store)
-            NearbyService.directions(to: place)
-        }
     }
 }
 
@@ -166,7 +156,6 @@ private struct GuideBubble: View {
     var pointerX: CGFloat
     var next: () -> Void
     var skip: () -> Void
-    var directions: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -205,17 +194,13 @@ private struct GuideBubble: View {
                         .frame(height: 38)
                         .contentShape(Rectangle())
                 }
-                if let directions {
-                    Button(action: directions) { Label("Directions", systemImage: "location.north.fill") }
-                        .buttonStyle(.pill(.soft, height: 38))
-                }
                 if step.advance == .next {
                     Button(step.button, action: next)
                         .buttonStyle(.pill(.primary, height: 38))
                 } else {
                     HStack(spacing: 5) {
                         Image(systemName: "hand.tap.fill")
-                        Text("Tap it")
+                        Text(step.action)
                     }
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Palette.accent)

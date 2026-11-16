@@ -4,7 +4,7 @@
 //
 //  The 9:16 story card for a check-in. You preview it, can hide the streak
 //  line, then send it to another app through the share sheet. Only the
-//  photos and public fields go on the card, never your live location.
+//  place's photo and public fields go on the card, never your live location.
 //  Ported from features/celebrate/story-card.js.
 //
 
@@ -18,8 +18,6 @@ struct AdventureShareSheet: View {
     @Environment(RewardPopCenter.self) private var pop
     var place: Place
     var first: Bool
-    var placeImage: UIImage?
-    var selfieImage: UIImage?
 
     @State private var showStreak = true
     @State private var rendered: UIImage?
@@ -72,7 +70,7 @@ struct AdventureShareSheet: View {
     }
 
     private var card: some View {
-        AdventureStoryCard(place: place, city: city, first: first, placeImage: placeImage, selfieImage: selfieImage,
+        AdventureStoryCard(place: place, city: city, first: first,
                            streakDays: showStreak ? store.state.streak.days : nil, me: store.me)
             .aspectRatio(9 / 16, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
@@ -86,7 +84,7 @@ struct AdventureShareSheet: View {
 
     /// Draw the card at story size for sharing.
     private func render() {
-        let view = AdventureStoryCard(place: place, city: city, first: first, placeImage: placeImage, selfieImage: selfieImage,
+        let view = AdventureStoryCard(place: place, city: city, first: first,
                                       streakDays: showStreak ? store.state.streak.days : nil, me: store.me)
             .frame(width: 360, height: 640)
         let renderer = ImageRenderer(content: view)
@@ -95,22 +93,18 @@ struct AdventureShareSheet: View {
     }
 }
 
-/// The card itself: the place photo full bleed, the wordmark, your selfie and the line.
+/// The card itself: the place photo full bleed, the wordmark and the line.
 struct AdventureStoryCard: View {
     var place: Place
     var city: String
     var first: Bool
-    var placeImage: UIImage?
-    var selfieImage: UIImage?
     var streakDays: Int?
     var me: Person
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Group {
-                    if let placeImage { Image(uiImage: placeImage).resizable().scaledToFill() } else { PhotoView(path: place.photo) }
-                }
+                PhotoView(path: place.photo)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .clipped()
                 LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.25),
@@ -120,14 +114,6 @@ struct AdventureStoryCard: View {
                     HStack(alignment: .top) {
                         OdysseyWordmark(size: 17)
                         Spacer()
-                        if let selfieImage {
-                            Image(uiImage: selfieImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 58, height: 76)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.white, lineWidth: 2))
-                        }
                     }
                     Spacer()
                     foot
