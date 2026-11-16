@@ -31,7 +31,7 @@ struct ExploreTab: View {
     /// Where the top bar ends, so the card's photo bars sit under it.
     @State private var chromeBottom: CGFloat = 0
     /// "feed" is one place a screen; "list" is everything at once in a grid.
-    @AppStorage("exploreLayout") private var layout = "feed"
+    @AppStorage("exploreLayoutV2") private var layout = "list"
     @AppStorage("exploreListTab") private var listTab: ExploreListTab = .loved
 
     private static let tipKey = "explore-feed"
@@ -45,9 +45,11 @@ struct ExploreTab: View {
                 GeometryReader { geo in
                     ZStack(alignment: .top) {
                         content(size: geo.size)
-                        LinearGradient(colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
-                            .frame(height: topInset + 100)
-                            .allowsHitTesting(false)
+                        if layout != "list" {
+                            LinearGradient(colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: topInset + 100)
+                                .allowsHitTesting(false)
+                        }
                         topBar.padding(.top, topInset + Space.s2)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chromeBottom = $0 }
                     }
@@ -56,7 +58,7 @@ struct ExploreTab: View {
                 Color.clear.frame(height: Self.tabBarHeight)
             }
         }
-        .background(Palette.ink.ignoresSafeArea())
+        .background((layout == "list" ? Palette.surface : Palette.ink).ignoresSafeArea())
         .overlay {
             if !store.state.tipsSeen.contains(Self.tipKey) {
                 ExploreCoachMarks {
@@ -111,8 +113,17 @@ struct ExploreTab: View {
 
     /// The cards that pass the amenity filters.
     private var visible: [Place] {
-        guard !amenities.isEmpty else { return feed.cards }
+        guard !amenities.isEmpty else { return withYCFirst(feed.cards) }
         return feed.cards.filter { ExploreAmenity.place($0, has: amenities, store: store) }
+    }
+
+    /// Y Combinator leads the unfiltered feed, shown with its dining hall photo.
+    private func withYCFirst(_ cards: [Place]) -> [Place] {
+        guard feed.filter == .all, !cards.isEmpty, var yc = store.place("yc") else { return cards }
+        let hall = "assets/media/places/sf-g-yc-hall.jpg"
+        yc.photo = hall
+        yc.photos = [hall] + (yc.photos ?? []).filter { $0 != hall }
+        return [yc] + cards.filter { $0.id != "yc" }
     }
 
     // MARK: Feed
@@ -154,13 +165,13 @@ struct ExploreTab: View {
 
     private var loadingPage: some View {
         VStack(spacing: Space.s3) {
-            ProgressView().tint(.white)
+            ProgressView()
             Text("Finding places around you")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Palette.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Palette.ink)
+        .background(Palette.surface)
     }
 
     private var emptyPage: some View {
@@ -306,54 +317,57 @@ struct ExploreTab: View {
     /// amenity filters under it.
     private var topBar: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            HStack(spacing: Space.s2) {
+            HStack(spacing: 6) {
                 ExploreGemHUD(gem: TasteGem.of(store), pops: gemPops) {
                     Haptics.tap()
                     router.push(.tasteProfile)
                 }
                 .layoutPriority(1)
-                Spacer(minLength: Space.s1)
+                Spacer(minLength: 2)
                 Button { showLocation = true } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "location.fill").font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Palette.accent)
                         Text(store.exploreLocation.label.split(separator: ",").first.map(String.init) ?? "Nearby")
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.ink)
                     .padding(.horizontal, Space.s3)
                     .frame(height: ExploreChrome.height)
-                    .frame(maxWidth: 140)
+                    .frame(maxWidth: 118)
                     .background(ExploreChrome.fill, in: Capsule())
+                    .shadow(color: ExploreChrome.shadow, radius: 6, y: 2)
                 }
                 .buttonStyle(PressStyle(scale: 0.95))
                 .accessibilityLabel("Explore location")
-                Button {
-                    Haptics.tap()
+                circleButton(layout == "list" ? "rectangle.portrait" : "square.grid.2x2",
+                             label: layout == "list" ? "Show one at a time" : "Show all as a grid") {
                     withAnimation(.easeInOut(duration: 0.25)) { layout = layout == "list" ? "feed" : "list" }
-                } label: {
-                    Image(systemName: layout == "list" ? "rectangle.portrait" : "square.grid.2x2")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: ExploreChrome.height, height: ExploreChrome.height)
-                        .background(ExploreChrome.fill, in: Circle())
-                        .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(PressStyle(scale: 0.92))
-                .accessibilityLabel(layout == "list" ? "Show one at a time" : "Show all as a list")
-                Button { Haptics.tap(); showSearch = true } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: ExploreChrome.height, height: ExploreChrome.height)
-                        .background(ExploreChrome.fill, in: Circle())
-                }
-                .buttonStyle(PressStyle(scale: 0.92))
-                .accessibilityLabel("Search and categories")
+                circleButton("magnifyingglass", label: "Search and categories") { showSearch = true }
+                circleButton("bookmark.fill", label: "Saved places") { router.push(.saved) }
             }
             .padding(.horizontal, Space.s4)
             chips
         }
+    }
+
+    private func circleButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(width: ExploreChrome.height, height: ExploreChrome.height)
+                .background(ExploreChrome.fill, in: Circle())
+                .shadow(color: ExploreChrome.shadow, radius: 6, y: 2)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(PressStyle(scale: 0.92))
+        .accessibilityLabel(label)
     }
 
     private var chips: some View {
@@ -365,7 +379,7 @@ struct ExploreTab: View {
                     }
                 }
                 ForEach(ExploreAmenity.allCases) { a in
-                    ExploreGlassChip(label: a.label, icon: nil, isOn: amenities.contains(a)) {
+                    ExploreGlassChip(label: a.label, icon: a.icon, isOn: amenities.contains(a)) {
                         Haptics.tap()
                         withAnimation(.easeOut(duration: 0.2)) {
                             if amenities.contains(a) { amenities.remove(a) } else { amenities.insert(a) }
@@ -374,6 +388,7 @@ struct ExploreTab: View {
                 }
             }
             .padding(.horizontal, Space.s4)
+            .padding(.vertical, 4)
         }
     }
 

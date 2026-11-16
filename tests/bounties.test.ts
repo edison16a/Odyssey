@@ -55,6 +55,12 @@ describe("bounty validation and allocation", () => {
   test.each([0, 2, 7.5, "7", -1, 365])("rejects invalid duration %s", (durationDays) => {
     expect(() => normalizeBounty(draft({ durationDays }))).toThrow();
   });
+  test("accepts the iOS app's [lat, lng] coordinates", () => {
+    const pair = [center.lat, center.lng];
+    const value = normalizeBounty(draft({ center: pair, target: { ...draft().target, place: { ...draft().target.place, coords: pair } } }));
+    expect(value.center).toEqual(center);
+    expect(value.target.place.coords).toEqual(center);
+  });
   test.each(["place", "street", "city"])("supports remote %s target without device GPS", (kind) => {
     const value = normalizeBounty(draft({ target: { ...draft().target, kind }, radius: kind === "city" ? 3000 : 120 }));
     expect(value.center).toEqual(center);

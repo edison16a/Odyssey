@@ -48,11 +48,11 @@ struct ExploreListView: View {
                 .padding(.top, Space.s3)
                 if loading || shown.count < 6 {
                     HStack(spacing: Space.s2) {
-                        ProgressView().tint(.white).controlSize(.small)
+                        ProgressView().controlSize(.small)
                         Text(tab == .gems ? "Looking for more hidden gems" : "Finding more places")
                             .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(Palette.muted)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Space.s6)
                     .onAppear(perform: onNeedMore)
@@ -62,7 +62,7 @@ struct ExploreListView: View {
             .padding(.bottom, Space.s8)
         }
         .scrollIndicators(.hidden)
-        .background(Palette.ink)
+        .background(Palette.surface)
         // Ask Supermemory to rank what's on the grid each time it grows, so the
         // reasons under each card come from your memories, not just the phone.
         .task(id: places.count / 12) { await Cloud.shared.rank(places, timeout: 12) }
@@ -79,16 +79,16 @@ struct ExploreListView: View {
                         if t == .gems { Image(systemName: "star.fill").font(.system(size: 11, weight: .bold)) }
                         Text(t.label).font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(tab == t ? Palette.ink : .white.opacity(0.75))
+                    .foregroundStyle(tab == t ? .white : Palette.muted)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
-                    .background(tab == t ? Color.white : .clear, in: Capsule())
+                    .background(tab == t ? Palette.ink : .clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(4)
-        .background(.white.opacity(0.1), in: Capsule())
+        .background(Palette.surface2, in: Capsule())
         .padding(.horizontal, Space.s4)
     }
 
@@ -99,7 +99,7 @@ struct ExploreListView: View {
                  ? "Nobody on Odyssey has been yet. Be first for +\(Rewards.first.coins) coins."
                  : "Picked for your explorer type: \(gem.persona)")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(Palette.ink)
             if Cloud.shared.usedSupermemory {
                 HStack(spacing: 5) {
                     Image(systemName: "brain.head.profile").font(.system(size: 11, weight: .bold))
@@ -108,7 +108,7 @@ struct ExploreListView: View {
                          : "Ranked with Supermemory")
                         .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(Color(hex: "#c9b6ff"))
+                .foregroundStyle(Palette.rare)
             }
         }
         .padding(.horizontal, Space.s4)
@@ -165,12 +165,12 @@ struct ExploreListCard: View {
                 .padding(.top, 4)
             Text(store.why(place))
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Palette.muted)
                 .lineLimit(2)
             Text(Format.distance(store.metres(to: place)))
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(Palette.faint)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Palette.ink)
     }
 }

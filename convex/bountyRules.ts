@@ -20,11 +20,18 @@ export function bountyQuote(pool: unknown) {
   return { pool: poolCents / 100, platformFee: feeCents / 100, totalAmount: (poolCents + feeCents) / 100 };
 }
 
+/** The app sends coordinates as [lat, lng]; older callers and tests send { lat, lng }. */
+function point(value: any): { lat?: unknown; lng?: unknown } | undefined {
+  if (Array.isArray(value)) return { lat: value[0], lng: value[1] };
+  return value ?? undefined;
+}
+
 export function normalizeBounty(input: any) {
   if (!input || typeof input !== "object") throw new Error("Choose a bounty location");
   const quote = bountyQuote(input.pool);
-  const lat = finite(input.center?.lat, "latitude");
-  const lng = finite(input.center?.lng, "longitude");
+  const center = point(input.center);
+  const lat = finite(center?.lat, "latitude");
+  const lng = finite(center?.lng, "longitude");
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error("Invalid coordinates");
   const kind = text(input.target?.kind, "target type", 10);
   // `area` and missing new fields support older installed clients and pending records.
@@ -41,7 +48,7 @@ export function normalizeBounty(input: any) {
   // Store a minimal location snapshot so remote place details survive app restarts.
   if (input.target?.place) {
     const p = input.target.place;
-    const coords = p.coords;
+    const coords = point(p.coords);
     if (finite(coords?.lat, "place latitude") !== lat || finite(coords?.lng, "place longitude") !== lng) {
       throw new Error("Location coordinates must match the bounty center");
     }

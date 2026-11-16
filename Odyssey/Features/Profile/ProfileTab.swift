@@ -3,10 +3,9 @@
 //  Odyssey
 //
 //  Your profile, the rightmost tab. The banner and framed avatar up top,
-//  the showcase of your best exploring, your home screen widgets, places
-//  you discovered first, your adventure history, badges, explorer icon,
-//  the explored map and Odyssey Globe cards, rank, standings, wallet and the
-//  business entry, then your posts. A title bar with your name
+//  the showcase of your best exploring, places you discovered first, your
+//  adventure history, the business entry (until you close it), then your
+//  posts and explored places. A title bar with your name
 //  slides in once you scroll past the header, and your profile effect wraps
 //  the whole screen. Ported from profile-tab.js.
 //
@@ -19,7 +18,6 @@ struct ProfileTab: View {
     @Environment(AppRouter.self) private var router
     @State private var scrolled = false
     @State private var contentTab = "posts"
-    @State private var pickingExplorer = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -46,11 +44,6 @@ struct ProfileTab: View {
             topBar
         }
         .background(Palette.surface)
-        .sheet(isPresented: $pickingExplorer) {
-            ProfileExplorerPicker()
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(28)
-        }
     }
 
     private func sections(_ proxy: ScrollViewProxy) -> some View {
@@ -62,37 +55,14 @@ struct ProfileTab: View {
             .padding(.horizontal, 20)
             .padding(.top, 24)
 
-            WidgetsShelf()
-                .padding(.top, 28)
-
             ProfileFirstsSection().padding(.top, 28)
             ProfileHistorySection().padding(.top, 28)
-            ProfileBadgesSection().padding(.top, 28)
 
-            if let explorer = store.seed.explorer(store.state.equipped.explorer) {
-                ProfileExplorerCard(explorer: explorer, km: store.kmWalked) { pickingExplorer = true }
+            if !store.state.tipsSeen.contains(ProfileBusinessEntry.dismissKey) {
+                ProfileBusinessEntry()
                     .padding(.horizontal, 20)
                     .padding(.top, 28)
             }
-
-            ProfileExploredCard()
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
-
-            ProfileGlobeCard()
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
-
-            ProfileRoadmap(xp: store.state.wallet.xp) { router.push(.ranks) }
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
-
-            ProfileStandingsSection().padding(.top, 28)
-            ProfileWalletSection().padding(.top, 28)
-
-            ProfileBusinessEntry()
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
 
             ProfileContent(tab: $contentTab)
                 .padding(.top, 28)

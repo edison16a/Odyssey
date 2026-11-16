@@ -216,7 +216,7 @@ private struct RailButton: View {
                 .foregroundStyle(tint)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 44, height: 44)
-                .background(filled ? Color.white : ExploreChrome.fill, in: Circle())
+                .background(filled ? Color.white : Color.black.opacity(0.32), in: Circle())
                 .animation(.easeOut(duration: 0.18), value: filled)
         }
         .buttonStyle(PressStyle(scale: 0.9))

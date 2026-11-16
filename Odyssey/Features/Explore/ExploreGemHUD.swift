@@ -30,20 +30,22 @@ struct ExploreGemHUD: View {
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Palette.ink)
             .padding(.leading, 7)
             .padding(.trailing, 12)
             .frame(height: ExploreChrome.height)
             .background(ExploreChrome.fill, in: Capsule())
+            .shadow(color: ExploreChrome.shadow, radius: 6, y: 2)
         }
         .buttonStyle(PressStyle(scale: 0.95))
         .accessibilityLabel("Your taste: \(gem.persona). Open taste profile")
     }
 }
 
-/// The one look shared by every control floating over the feed's photos:
-/// a soft dark capsule, no borders, white type.
+/// The one look shared by Explore's floating controls: a white capsule with
+/// dark type and a soft shadow, readable on the light grid and over photos.
 enum ExploreChrome {
     static let height: CGFloat = 34
-    static let fill = Color.black.opacity(0.32)
+    static let fill = Color.white
+    static let shadow = Color.black.opacity(0.12)
 }

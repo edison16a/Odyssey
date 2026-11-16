@@ -27,12 +27,12 @@ struct OnboardingLocationStep: View {
                 .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .padding(.bottom, 6)
             Text("Find places near you").font(.system(size: 28, weight: .bold)).tracking(-0.8)
-            Text("Odyssey uses your location while the app is open to show what is around you, measure how far places are and confirm a check-in happened where you say it did.")
+            Text("Odyssey uses your location while the app is open to show what is around you, measure how far places are and confirm your videos were filmed where you say.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.72))
             VStack(alignment: .leading, spacing: 10) {
                 point("map", "Distances and places around you")
-                point("camera", "Check-ins that count where you are")
+                point("video", "Videos that count where you film them")
                 point("lock.fill", "Never shared with friends unless you post")
             }
             .padding(16)

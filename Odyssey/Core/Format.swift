@@ -108,7 +108,15 @@ nonisolated struct Coord: Codable, Hashable, Sendable {
         self.init(coordinate.latitude, coordinate.longitude)
     }
 
+    private enum Keys: String, CodingKey { case lat, lng }
+
+    /// Saved data uses [lat, lng]; the server stores { lat, lng }. Read either.
     init(from decoder: Decoder) throws {
+        if let keyed = try? decoder.container(keyedBy: Keys.self), keyed.contains(.lat) {
+            lat = try keyed.decode(Double.self, forKey: .lat)
+            lng = try keyed.decode(Double.self, forKey: .lng)
+            return
+        }
         var container = try decoder.unkeyedContainer()
         lat = try container.decode(Double.self)
         lng = try container.decode(Double.self)

@@ -123,7 +123,7 @@ private struct AuthLanding: View {
             Text(Brand.motto)
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.2)
-            Text(Brand.tagline + " Discover places you will love, explore with friends and get rewarded for every discovery.")
+            Text("Find places you'll love. Go there and film them. Get rewarded for making them easier for the next person.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.72))
                 .multilineTextAlignment(.center)

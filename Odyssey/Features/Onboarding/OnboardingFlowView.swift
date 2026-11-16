@@ -76,9 +76,21 @@ struct OnboardingFlowView: View {
             Spacer()
             OdysseyMark(size: 52).padding(.bottom, 6)
             Text("Welcome to Odyssey").font(.system(size: 28, weight: .bold)).tracking(-0.8)
-            Text("Help us answer a few questions so we can find places you will love. Five quick taps.")
+            Text("Odyssey helps you find places you'll love and rewards you for making them easier to explore.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.72))
+            VStack(alignment: .leading, spacing: 10) {
+                loopStep(1, "heart.fill", "Find places you'll love")
+                loopStep(2, "video.fill", "Go there and film it")
+                loopStep(3, "gift.fill", "Get rewarded for helping the next person")
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(.white.opacity(0.16), lineWidth: 1))
+            Text("First, five quick taps so we know what you like.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.6))
                 .padding(.bottom, 8)
             Button("Let's go") { go(.question(0)) }
                 .buttonStyle(AuthBigButtonStyle())
@@ -163,5 +175,18 @@ private struct OnboardingAnswerStyle: ButtonStyle {
             .background(light ? Color.white : Color.white.opacity(0.16), in: Capsule())
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+
+}
+
+/// One row of the find, film, get rewarded loop on the welcome screen.
+private func loopStep(_ n: Int, _ icon: String, _ text: String) -> some View {
+    HStack(spacing: 12) {
+        Image(systemName: icon)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Palette.ink)
+            .frame(width: 30, height: 30)
+            .background(.white, in: Circle())
+        Text(text).font(.system(size: 15, weight: .semibold))
     }
 }

@@ -100,33 +100,18 @@ struct TasteGemView: View {
 
     var body: some View {
         let shown = build ?? 1
+        // One flat colour and a white symbol, the same look as the taste page's banner.
         let main = gem.colors[0]
-        let second = gem.colors.count > 1 ? gem.colors[1] : main
-        let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
         ZStack {
-            shape.fill(LinearGradient(colors: [main.adjusted(0.18), main, second.adjusted(-0.1)],
-                                      startPoint: .topLeading, endPoint: .bottomTrailing))
-            shape.strokeBorder(.white.opacity(0.35), lineWidth: max(1, size * 0.02))
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).fill(main)
             Image(systemName: gem.icon)
                 .font(.system(size: size * 0.46, weight: .bold))
                 .foregroundStyle(.white)
-                .shadow(color: main.adjusted(-0.4).opacity(0.5), radius: size * 0.03, y: size * 0.02)
-            if animated && size > 40 {
-                TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                    let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) / 4
-                    LinearGradient(colors: [.clear, .white.opacity(0.28), .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: size * 0.35)
-                        .rotationEffect(.degrees(20))
-                        .offset(x: size * (CGFloat(t) * 2.2 - 1.1))
-                }
-                .clipShape(shape)
-                .allowsHitTesting(false)
-            }
         }
         .frame(width: size, height: size)
         .scaleEffect(max(0.05, shown))
         .opacity(min(1, shown * 1.6))
-        .shadow(color: main.adjusted(-0.3).opacity(size > 60 ? 0.35 : 0.2), radius: size * 0.08, y: size * 0.05)
+        .shadow(color: main.opacity(size > 60 ? 0.35 : 0), radius: size * 0.08, y: size * 0.05)
         .accessibilityLabel("Explorer type: \(gem.persona)")
     }
 }
