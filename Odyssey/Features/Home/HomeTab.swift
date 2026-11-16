@@ -18,6 +18,7 @@ struct HomeTab: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
     @Environment(ToastCenter.self) private var toast
+    @Environment(Guide.self) private var guide
     @State private var preview: Place?
     @State private var bountyOpen: Bounty?
     @State private var paid: [String] = []
@@ -30,6 +31,12 @@ struct HomeTab: View {
                         .id("top")
                         .padding(.horizontal, 20)
                         .padding(.top, 6)
+                    if store.firstStepsShown {
+                        FirstStepsCard()
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                     HomeAdventureHero()
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
@@ -45,6 +52,11 @@ struct HomeTab: View {
             }
             .onChange(of: router.scrollToTop[.home] ?? 0) { _, _ in
                 withAnimation { reader.scrollTo("top", anchor: .top) }
+            }
+            // A spotlight is about to land on Home: bring what it lights up into view.
+            .onChange(of: guide.step) { _, step in
+                guard let step, step.tab == .home else { return }
+                withAnimation(.easeInOut(duration: 0.3)) { reader.scrollTo("top", anchor: .top) }
             }
         }
         .background(Palette.surface)
@@ -106,6 +118,7 @@ struct HomeRewardsHeader: View {
                 }
                 Spacer()
                 IconButton(icon: "users", kind: .white, label: "Friends") { router.push(.friends) }
+                    .guideSpot(.friends)
                 IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") { router.push(.notifications) }
             }
             HStack(spacing: 8) {
@@ -143,6 +156,7 @@ struct HomeRewardsHeader: View {
                 }
                 .buttonStyle(PressStyle())
             }
+            .guideSpot(.stats)
             .animation(.spring(response: 0.5, dampingFraction: 0.8), value: store.state.wallet.coins)
         }
     }
@@ -180,6 +194,7 @@ struct HomeAdventureHero: View {
                 .transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity))
         } else {
             sealed
+                .guideSpot(.hero)
                 .transition(.opacity)
         }
     }
@@ -255,6 +270,7 @@ struct HomeAdventureHero: View {
             .padding(14)
             .background(.white)
         }
+        .guideSpot(.hero)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)

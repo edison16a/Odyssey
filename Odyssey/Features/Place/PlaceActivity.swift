@@ -3,9 +3,8 @@
 //  Odyssey
 //
 //  Who keeps coming back to a place and how busy it has been: the
-//  regulars list with visit bars, the 18 week activity grid (one column
-//  per week, darker squares mean more visits) and the photos explorers
-//  posted here.
+//  regulars list with visit bars and the 18 week activity grid (one column
+//  per week, darker squares mean more visits).
 //
 
 import Foundation
@@ -160,39 +159,5 @@ struct PlaceContributions: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Explorer photos: the place with their selfie in the corner. Opens the story.
-struct PlaceExplorerPhotos: View {
-    @Environment(AppRouter.self) private var router
-    var place: Place
-    var posts: [Post]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "From explorers")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(posts) { post in
-                        Button { router.push(.person(post.by)) } label: {
-                            PhotoView(path: place.photo)
-                                .frame(width: 132, height: 170)
-                                .overlay(alignment: .topLeading) {
-                                    PhotoView(path: post.selfie ?? "")
-                                        .frame(width: 44, height: 58)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white, lineWidth: 2))
-                                        .padding(8)
-                                }
-                                .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                        }
-                        .buttonStyle(PressStyle())
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-            .padding(.horizontal, -20)
-        }
     }
 }

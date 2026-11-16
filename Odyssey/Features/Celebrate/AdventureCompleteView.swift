@@ -63,7 +63,7 @@ struct AdventureCompleteView: View {
         .overlay { if confetti { ConfettiView(count: result.first ? 110 : 70).ignoresSafeArea() } }
         .adventureMoments(result)
         .sheet(isPresented: $sharing) {
-            AdventureShareSheet(place: place, first: result.first, placeImage: nil, selfieImage: nil)
+            AdventureShareSheet(place: place, first: result.first)
         }
         .onAppear {
             withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) { appeared = true }

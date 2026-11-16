@@ -72,7 +72,6 @@ struct ProfileHistorySection: View {
         var when: String
         var first: Bool
         var video: Bool
-        var photoFile: String?
     }
 
     var body: some View {
@@ -100,14 +99,14 @@ struct ProfileHistorySection: View {
             let minutes = post.createdAt.map { Int(Date().timeIntervalSince($0) / 60) } ?? 0
             let when = minutes < 60 ? "Just now" : (minutes < 1440 ? "Today, " + Format.clock(post.createdAt ?? Date()) : Format.shortDate(post.createdAt ?? Date()))
             rows.append(Row(id: post.id, place: place, when: when, first: post.first ?? false,
-                            video: !(s.videos[post.placeId] ?? []).isEmpty, photoFile: post.photoFile))
+                            video: !(s.videos[post.placeId] ?? []).isEmpty))
         }
         let home = store.home.id
         for recap in store.seed.recaps where (recap.area ?? "berkeley") == home {
             for (index, stop) in recap.stops.reversed().enumerated() {
                 guard let place = store.place(stop.placeId) else { continue }
                 rows.append(Row(id: "\(recap.id)-\(index)", place: place, when: recap.date + ", " + stop.time,
-                                first: stop.first ?? false, video: stop.action == "video", photoFile: nil))
+                                first: stop.first ?? false, video: stop.action == "video"))
             }
         }
         return rows
@@ -123,7 +122,7 @@ struct ProfileHistoryRow: View {
             HStack(spacing: 12) {
                 Circle().fill(Palette.accent).frame(width: 10, height: 10)
                     .overlay(Circle().strokeBorder(.white, lineWidth: 3).padding(-3))
-                UserPhotoView(file: row.photoFile, fallback: row.place.photo)
+                PhotoView(path: row.place.photo)
                     .frame(width: 48, height: 48)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {

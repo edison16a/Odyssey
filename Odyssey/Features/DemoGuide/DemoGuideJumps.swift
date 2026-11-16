@@ -32,7 +32,7 @@ enum DemoGuideJumps {
         ]),
         DemoGuideGroup(title: "Explore and get rewarded", items: [
             DemoGuideJump(id: "home", label: "Home", icon: "home"),
-            DemoGuideJump(id: "checkin", label: "Check in, photo and selfie", icon: "camera"),
+            DemoGuideJump(id: "checkin", label: "Check in with a video", icon: "video"),
             DemoGuideJump(id: "first", label: "Be the first explorer", icon: "star"),
             DemoGuideJump(id: "walk", label: "Walkthrough video", icon: "video"),
             DemoGuideJump(id: "place", label: "Place page", icon: "building"),

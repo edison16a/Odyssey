@@ -43,7 +43,7 @@ struct WalkthroughRecorder: View {
             }
         }
         .task {
-            if camera.isAvailable { await camera.start(side: .back, video: true) }
+            if camera.isAvailable { await camera.start() }
         }
         .onDisappear { camera.stop() }
     }

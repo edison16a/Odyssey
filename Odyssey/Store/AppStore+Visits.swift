@@ -2,10 +2,9 @@
 //  AppStore+Visits.swift
 //  Odyssey
 //
-//  Exploring places. A check-in is the core action: be there, take the
-//  BeReal style photo pair, and get rewarded. Being the first Odyssey explorer
-//  somewhere pays a bonus and keeps your name on the place. A walkthrough
-//  video afterwards is optional and pays bonus XP when it is shared.
+//  Exploring places. A check-in is the core action: be there, film a short
+//  video, and get rewarded. Being the first Odyssey explorer somewhere pays
+//  a bonus and keeps your name on the place.
 //  Ported from services/visits.js and data/visits.js.
 //
 
@@ -188,7 +187,7 @@ extension AppStore {
 
     /// Post a check-in. Rewards pay once per place per day, and only when you are there.
     /// Everything paid comes from `checkInRewards`, so it matches what was promised.
-    func checkIn(_ place: Place, caption: String, photoFile: String?, selfieFile: String?, withVideo: Bool = true) -> CheckInResult {
+    func checkIn(_ place: Place, caption: String, withVideo: Bool = true) -> CheckInResult {
         let rewards = checkInRewards(for: place, withVideo: withVideo)
         let earn = rewards.earnable
         let first = earn && rewards.first
@@ -199,7 +198,7 @@ extension AppStore {
         let coins = earn ? rewards.coins : 0
         let points = earn ? rewards.points : 0
 
-        let post = addPost(placeId: place.id, kind: "visit", caption: caption, first: first, photoFile: photoFile, selfieFile: selfieFile)
+        let post = addPost(placeId: place.id, kind: "visit", caption: caption, first: first)
         if earn {
             let today = Format.today()
             update { s in
@@ -234,7 +233,7 @@ extension AppStore {
                                    before: before, after: after, rankBefore: rankBefore, rankAfter: rank(), post: post,
                                    recommended: picked, board: board, rewards: rewards,
                                    tooFar: rewards.fresh && !rewards.inReach)
-        Cloud.shared.recordCheckIn(place, caption: caption, photoFile: photoFile, selfieFile: selfieFile, result: result)
+        Cloud.shared.recordCheckIn(place, caption: caption, result: result)
         return result
     }
 

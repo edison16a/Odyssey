@@ -19,7 +19,7 @@ struct RewardTests {
         let store = AppStore(preview: true)
         let place = store.place("marina")!
         let before = store.state.wallet.coins
-        let result = store.checkIn(place, caption: "", photoFile: nil, selfieFile: nil)
+        let result = store.checkIn(place, caption: "")
         #expect(result.first)
         #expect(result.coins == 250)
         #expect(store.state.wallet.coins == before + 250)
@@ -30,8 +30,8 @@ struct RewardTests {
     @Test func secondCheckInTheSameDayPaysNothing() {
         let store = AppStore(preview: true)
         let place = store.place("valley-life")!
-        let first = store.checkIn(place, caption: "", photoFile: nil, selfieFile: nil)
-        let again = store.checkIn(place, caption: "", photoFile: nil, selfieFile: nil)
+        let first = store.checkIn(place, caption: "")
+        let again = store.checkIn(place, caption: "")
         #expect(first.coins == 100)
         #expect(again.fresh == false)
         #expect(again.coins == 0)

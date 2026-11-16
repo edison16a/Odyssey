@@ -283,14 +283,7 @@ struct PlaceActivityTab: View {
             if let history, !history.recent.isEmpty {
                 PlaceContributions(items: history.recent)
             }
-            if !explorerPosts.isEmpty {
-                PlaceExplorerPhotos(place: place, posts: explorerPosts)
-            }
         }
-    }
-
-    private var explorerPosts: [Post] {
-        store.seed.posts.filter { $0.placeId == place.id && $0.selfie != nil }
     }
 }
 
