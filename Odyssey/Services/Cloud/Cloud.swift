@@ -6,7 +6,7 @@
 //  source of truth for the screens; Convex gets everything that matters:
 //
 //  - your profile, wallet, streak and stats (for friends and leaderboards)
-//  - every check-in with its photo and selfie, uploaded to Convex storage
+//  - every check-in, and the video filmed for it
 //  - walkthrough videos you chose to share, and what they taught Odyssey
 //  - every swipe and star, which also teach Supermemory your taste
 //  - the whole app state, so signing in on a new phone brings it all back
@@ -195,21 +195,17 @@ final class Cloud {
 
     // MARK: Adventures
 
-    /// A check-in: upload the photos, then record it (Convex decides who was first).
-    func recordCheckIn(_ place: Place, caption: String, photoFile: String?, selfieFile: String?, result: CheckInResult) {
+    /// Record a check-in (Convex decides who was first). Its video is uploaded separately.
+    func recordCheckIn(_ place: Place, caption: String, result: CheckInResult) {
         guard signedIn, let store else { return }
         let features = store.features(place)
         let city = store.state.user.city
         Task {
             do {
-                let photo = try await uploadPhoto(photoFile, kind: "checkin-photo", placeId: place.id)
-                let selfie = try await uploadPhoto(selfieFile, kind: "selfie", placeId: place.id)
                 try await api.mutation("adventures:checkIn", obj([
                     "place": placeArgs(place),
                     "day": Format.today(),
                     "caption": caption,
-                    "photoStorageId": photo,
-                    "selfieStorageId": selfie,
                     "first": result.first,
                     "recommended": result.recommended,
                     "coins": Double(result.coins),

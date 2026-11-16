@@ -69,16 +69,7 @@ struct AdventureHistoryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Color.clear
                     .aspectRatio(0.78, contentMode: .fit)
-                    .overlay { UserPhotoView(file: post.photoFile, fallback: place?.photo) }
-                    .overlay(alignment: .topLeading) {
-                        if post.selfieFile != nil {
-                            UserPhotoView(file: post.selfieFile, fallback: nil)
-                                .frame(width: 44, height: 58)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white, lineWidth: 2))
-                                .padding(8)
-                        }
-                    }
+                    .overlay { PhotoView(path: place?.photo ?? "") }
                     .overlay(alignment: .topTrailing) {
                         if post.first == true {
                             Tag(text: "First", icon: "star-fill", tone: .rare).padding(8)

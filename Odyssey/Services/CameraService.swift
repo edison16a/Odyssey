@@ -2,13 +2,12 @@
 //  CameraService.swift
 //  Odyssey
 //
-//  The single camera, for walkthroughs and for phones that cannot run both
-//  cameras at once (DualCamera uses it there, taking the place and then the
-//  selfie from one press). Walkthroughs record a short video with sound. All capture work runs on its own queue; the SwiftUI
-//  side only sees the published state.
+//  The video camera, for check-ins, walkthroughs and 3D scans. It records a
+//  short video with sound. All capture work runs on its own queue; the
+//  SwiftUI side only sees the published state.
 //
 //  The simulator has no camera, so isAvailable is false there and the
-//  check-in screens fall back to the place photo and a sample selfie.
+//  recorder plays a simulated walk through the place's photos instead.
 //
 
 import Foundation
@@ -19,13 +18,9 @@ import UIKit
 
 @Observable
 final class CameraModel {
-    enum Side { case back, front }
-
-    var side: Side = .back
     var isRunning = false
     var isRecording = false
     var permissionDenied = false
-    var flash = false
 
     @ObservationIgnored let engine = CameraEngine()
     /// False once stop() is called, so a start still waiting on permission or setup does not turn the camera back on.
@@ -36,21 +31,20 @@ final class CameraModel {
 
     var isAvailable: Bool { CameraModel.hasCamera }
 
-    /// Ask for camera (and microphone, for video) access, then start the preview.
+    /// Ask for camera and microphone access, then start the preview on the back camera.
     /// `ultraWide` asks for the 0.5x camera, which 3D scans track far better (more of the room in every frame).
-    func start(side: Side = .back, video: Bool = false, ultraWide: Bool = false) async {
+    func start(ultraWide: Bool = false) async {
         guard isAvailable else { return }
         wanted = true
         var granted = await AVCaptureDevice.requestAccess(for: .video)
-        if video { _ = await AVCaptureDevice.requestAccess(for: .audio) }
+        _ = await AVCaptureDevice.requestAccess(for: .audio)
         if AVCaptureDevice.authorizationStatus(for: .video) == .authorized { granted = true }
         guard granted else {
             permissionDenied = true
             return
         }
         guard wanted else { return }
-        self.side = side
-        await engine.configure(position: side == .back ? .back : .front, video: video, ultraWide: ultraWide)
+        await engine.configure(ultraWide: ultraWide)
         // The screen closed while the session was starting: turn it straight back off.
         guard wanted else {
             engine.stop()
@@ -63,25 +57,6 @@ final class CameraModel {
         wanted = false
         engine.stop()
         isRunning = false
-    }
-
-    func flip() async {
-        side = side == .back ? .front : .back
-        await engine.switchCamera(to: side == .back ? .back : .front)
-    }
-
-    func switchTo(_ side: Side) async {
-        guard side != self.side else { return }
-        self.side = side
-        await engine.switchCamera(to: side == .back ? .back : .front)
-    }
-
-    /// Take one photo with the current camera. Front photos come back mirrored like a selfie.
-    func capture() async -> UIImage? {
-        guard isRunning else { return nil }
-        let image = await engine.capturePhoto(flash: flash && side == .back)
-        guard let image, side == .front, let cg = image.cgImage else { return image }
-        return UIImage(cgImage: cg, scale: image.scale, orientation: .leftMirrored)
     }
 
     func startRecording() {
@@ -100,35 +75,28 @@ final class CameraModel {
 nonisolated final class CameraEngine: NSObject, @unchecked Sendable {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "odyssey.camera")
-    private let photoOutput = AVCapturePhotoOutput()
     private let movieOutput = AVCaptureMovieFileOutput()
     private var input: AVCaptureDeviceInput?
-    private var photoContinuation: CheckedContinuation<UIImage?, Never>?
     private var movieContinuation: CheckedContinuation<URL?, Never>?
 
-    func configure(position: AVCaptureDevice.Position, video: Bool, ultraWide: Bool = false) async {
+    func configure(ultraWide: Bool = false) async {
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             queue.async {
                 self.session.beginConfiguration()
-                self.session.sessionPreset = video ? .high : .photo
+                self.session.sessionPreset = .high
                 self.session.inputs.forEach { self.session.removeInput($0) }
                 self.session.outputs.forEach { self.session.removeOutput($0) }
-                let wide = ultraWide ? AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: position) : nil
-                if let device = wide ?? Self.device(position), let input = try? AVCaptureDeviceInput(device: device),
+                let wide = ultraWide ? AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) : nil
+                if let device = wide ?? Self.device(), let input = try? AVCaptureDeviceInput(device: device),
                    self.session.canAddInput(input) {
                     self.session.addInput(input)
                     self.input = input
                 }
-                if video {
-                    if let mic = AVCaptureDevice.default(for: .audio), let audio = try? AVCaptureDeviceInput(device: mic),
-                       self.session.canAddInput(audio) {
-                        self.session.addInput(audio)
-                    }
-                    if self.session.canAddOutput(self.movieOutput) { self.session.addOutput(self.movieOutput) }
-                } else if self.session.canAddOutput(self.photoOutput) {
-                    self.session.addOutput(self.photoOutput)
-                    self.photoOutput.maxPhotoQualityPrioritization = .balanced
+                if let mic = AVCaptureDevice.default(for: .audio), let audio = try? AVCaptureDeviceInput(device: mic),
+                   self.session.canAddInput(audio) {
+                    self.session.addInput(audio)
                 }
+                if self.session.canAddOutput(self.movieOutput) { self.session.addOutput(self.movieOutput) }
                 self.session.commitConfiguration()
                 if !self.session.isRunning { self.session.startRunning() }
                 done.resume()
@@ -139,45 +107,6 @@ nonisolated final class CameraEngine: NSObject, @unchecked Sendable {
     func stop() {
         queue.async {
             if self.session.isRunning { self.session.stopRunning() }
-        }
-    }
-
-    func switchCamera(to position: AVCaptureDevice.Position) async {
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            queue.async {
-                guard let device = Self.device(position), let next = try? AVCaptureDeviceInput(device: device) else {
-                    done.resume()
-                    return
-                }
-                self.session.beginConfiguration()
-                if let current = self.input { self.session.removeInput(current) }
-                if self.session.canAddInput(next) {
-                    self.session.addInput(next)
-                    self.input = next
-                } else if let current = self.input {
-                    self.session.addInput(current)
-                }
-                self.session.commitConfiguration()
-                done.resume()
-            }
-        }
-    }
-
-    func capturePhoto(flash: Bool) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            queue.async {
-                // One shot at a time: a second capture would overwrite the first continuation and leave it hanging.
-                // Capturing with no live video connection throws, so check the session is really running.
-                guard self.session.outputs.contains(self.photoOutput), self.session.isRunning,
-                      self.photoOutput.connection(with: .video) != nil, self.photoContinuation == nil else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                self.photoContinuation = continuation
-                let settings = AVCapturePhotoSettings()
-                if flash, self.photoOutput.supportedFlashModes.contains(.on) { settings.flashMode = .on }
-                self.photoOutput.capturePhoto(with: settings, delegate: self)
-            }
         }
     }
 
@@ -202,28 +131,9 @@ nonisolated final class CameraEngine: NSObject, @unchecked Sendable {
         }
     }
 
-    private static func device(_ position: AVCaptureDevice.Position) -> AVCaptureDevice? {
-        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+    private static func device() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
             ?? AVCaptureDevice.default(for: .video)
-    }
-}
-
-nonisolated extension CameraEngine: AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        let image = photo.fileDataRepresentation().flatMap { UIImage(data: $0) }
-        queue.async {
-            self.photoContinuation?.resume(returning: image)
-            self.photoContinuation = nil
-        }
-    }
-
-    /// Always called last. If the shot failed before a photo came back (the session stopped mid capture),
-    /// the waiting shutter is released here instead of hanging.
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings, error: Error?) {
-        queue.async {
-            self.photoContinuation?.resume(returning: nil)
-            self.photoContinuation = nil
-        }
     }
 }
 

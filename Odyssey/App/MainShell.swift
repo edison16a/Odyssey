@@ -95,7 +95,7 @@ struct TabBar: View {
             .frame(maxWidth: .infinity)
             .offset(y: -2)
             .accessibilityLabel("Check in and earn coins")
-            tab(.explore)
+            tab(.explore).guideSpot(.exploreTab)
             tab(.profile)
         }
         .padding(.horizontal, 10)

@@ -63,7 +63,7 @@ struct ProfileContent: View {
         let place = store.place(post.placeId)
         return Color.clear
             .aspectRatio(1, contentMode: .fit)
-            .overlay { UserPhotoView(file: post.photoFile, fallback: place?.photo) }
+            .overlay { PhotoView(path: place?.photo ?? "") }
             .overlay(alignment: .topTrailing) {
                 if post.first == true {
                     Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)

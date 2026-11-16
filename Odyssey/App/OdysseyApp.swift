@@ -21,6 +21,7 @@ struct OdysseyApp: App {
     @State private var location = LocationService()
     @State private var toast = ToastCenter()
     @State private var rewardPop = RewardPopCenter()
+    @State private var guide = Guide()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -31,6 +32,7 @@ struct OdysseyApp: App {
                 .environment(location)
                 .environment(toast)
                 .environment(rewardPop)
+                .environment(guide)
                 .preferredColorScheme(.light)
                 .tint(Palette.ink)
                 .onAppear {
@@ -58,6 +60,8 @@ struct OdysseyApp: App {
 /// loading screen at launch.
 struct RootView: View {
     @Environment(AppStore.self) private var store
+    @Environment(AppRouter.self) private var router
+    @Environment(Guide.self) private var guide
     @State private var loading = true
 
     var body: some View {
@@ -81,6 +85,9 @@ struct RootView: View {
                         .zIndex(1)
                 }
             }
+            if store.state.session.signedIn && store.state.session.onboarded {
+                GuideOverlay()
+            }
             RewardPopOverlay()
             ToastOverlay()
             if loading {
@@ -90,12 +97,30 @@ struct RootView: View {
             }
         }
         .task { await finishLoading() }
+        .task(id: tourReady) { await startTour() }
         .animation(.easeInOut(duration: 0.35), value: store.state.session.signedIn)
         .animation(.easeInOut(duration: 0.35), value: store.state.session.onboarded)
     }
 }
 
 extension RootView {
+    /// The welcome tour is owed and the app is showing: straight after onboarding,
+    /// or at the next launch when the app was closed before the tour ended.
+    private var tourReady: Bool {
+        !loading && store.state.session.signedIn && store.state.session.onboarded && store.welcomeTourPending
+    }
+
+    /// Give Home a moment to settle, then let Globie start pointing.
+    private func startTour() async {
+        guard tourReady else { return }
+        try? await Task.sleep(for: .milliseconds(900))
+        guard !Task.isCancelled, tourReady, !guide.isRunning else { return }
+        router.cover = nil
+        router.paths[.home] = []
+        router.tab = .home
+        guide.startWelcome(store: store)
+    }
+
     /// Build the map layer while the logo shows, staying up at least long enough to read
     /// and never longer than a few seconds, so a slow phone still gets in.
     private func finishLoading() async {

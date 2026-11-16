@@ -28,6 +28,9 @@ struct ExploreTab: View {
     @State private var feeding = false
     /// Bumped on every fresh save so the gem gives a small pop.
     @State private var gemPops = 0
+    /// Bumped each time you land on another place, for the first-time hints.
+    @State private var moves = 0
+    @State private var coach = ExploreCoachMarks.Phase.swipe
     /// Where the top bar ends, so the card's photo bars sit under it.
     @State private var chromeBottom: CGFloat = 0
     /// "feed" is one place a screen; "list" is everything at once in a grid.
@@ -60,12 +63,14 @@ struct ExploreTab: View {
         }
         .background((layout == "list" ? Palette.surface : Palette.ink).ignoresSafeArea())
         .overlay {
-            if !store.state.tipsSeen.contains(Self.tipKey) {
-                ExploreCoachMarks {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        store.update { $0.tipsSeen.append(Self.tipKey) }
-                    }
+            // The hints wait for real places, since they are tried on them.
+            if !store.state.tipsSeen.contains(Self.tipKey), !visible.isEmpty {
+                ExploreCoachMarks(moves: moves, saves: gemPops, phase: $coach) {
+                    store.update { $0.tipsSeen.append(Self.tipKey) }
+                    // Ready for a replay of onboarding.
+                    coach = .swipe
                 }
+                .padding(.bottom, Self.tabBarHeight)
                 .transition(.opacity)
             }
         }
@@ -75,7 +80,8 @@ struct ExploreTab: View {
             syncCategory()
         }
         .onChange(of: store.state.discoverCategory) { syncCategory() }
-        .onChange(of: currentID) {
+        .onChange(of: currentID) { old, new in
+            if old != nil, new != nil { moves += 1 }
             warmPhotos()
             keepFed()
         }

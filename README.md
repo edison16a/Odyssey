@@ -33,7 +33,6 @@ The app follows the mockup's designs one to one, so these shots of the mockup sh
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/images/checkin.jpg" width="240" alt="Check-in with the place photo and a selfie inset"><br><sub>Check in: the place, then you</sub></td>
     <td align="center" width="33%"><img src="docs/images/adventure.jpg" width="240" alt="Adventure Complete with rewards"><br><sub>Adventure Complete, +100 coins</sub></td>
     <td align="center" width="33%"><img src="docs/images/explore-picks.jpg" width="240" alt="Three picks to swipe"><br><sub>Three picks at a time, swipe good or bad</sub></td>
   </tr>
@@ -51,10 +50,10 @@ The app follows the mockup's designs one to one, so these shots of the mockup sh
 
 ## What is in the app
 
-- **Check in with the real camera.** The back camera takes the place, then it flips to the front for you, BeReal style. Rewards match the mockup: +100 coins and +20 XP, +150 more for the first explorer anywhere on Odyssey, quests on top, and +50 more at a place Explore recommended.
+- **Check in with a video.** The + button opens the back camera with one record button: film a short look around and you are checked in. Rewards match the mockup: +100 coins and +20 XP, +150 more for the first explorer anywhere on Odyssey, quests on top, and +50 more at a place Explore recommended.
 - **The whole world is the map.** Wherever you walk, the hexes of a fixed world grid along your path turn blue, like a footprints map; car rides and GPS jumps do not count, and Settings can keep recording in the background. Walking past a place explores it, but it only becomes yours when you check in with a photo. Every shop, cafe, park and museum around you comes from Apple Maps points of interest and OpenStreetMap together, and when you reach one a card shows which friends have been there with a Check in button. Directions hand off to Apple Maps.
 - **Streaks with Globie.** One check-in a day keeps the streak. Every first check-in powers Globie up, and milestones at 10, 25, 50, 100 days and on turn Globie into a new form with a badge, a frame and a banner.
-- **3D scans.** The + button films a slow walk through the place you are at (found by GPS). The video goes to Convex, a render computer turns it into a 3D space with the people taken out, and the place lists it as a 3D space: a thumb stick to walk, drag to look. A place can have several spaces, each named by the explorer who filmed it, and only that explorer can rename or delete theirs. While it is being built, the place shows what the render computer is doing.
+- **3D scans.** From a place page you film a slow walk through it. The video goes to Convex, a render computer turns it into a 3D space with the people taken out, and the place lists it as a 3D space: a thumb stick to walk, drag to look. A place can have several spaces, each named by the explorer who filmed it, and only that explorer can rename or delete theirs. While it is being built, the place shows what the render computer is doing.
 - **Walkthroughs.** An optional short video after a check-in, recorded with consent. The phone reads a few frames with Apple's Vision framework to learn whether a place feels quiet or lively, which feeds recommendations.
 - **Explore.** An endless deck of picks ranked by your taste, with All, Be first, Close by, a category menu and a search bar that suggests from over a thousand things to do and eat. Swipe right or left and Odyssey learns your taste; star a place to pin it on your map. What Odyssey knows about you has its own page.
 - **Business bounties.** Businesses post a pool for walkthroughs of a place or an area, paid per video or split evenly; explorers see them in the feed and on the map and get paid in bounty cash, which also buys gift cards.
@@ -110,7 +109,7 @@ Filming tips that decide whether a scan works: walk slowly, turn slowly (a quick
 
 1. Open `Odyssey.xcodeproj` in Xcode 26 or later.
 2. Pick your team under Signing and Capabilities for the **Odyssey** and **OdysseyWidgetsExtension** targets. Both use the App Group `group.com.edisonlaw.Odyssey`; if Xcode asks, let it register the group.
-3. Run on an iPhone to use the camera. The simulator works too: check-ins fall back to the place photo and a sample selfie, and you can set a simulated location from the Debug menu.
+3. Run on an iPhone to use the camera. The simulator works too: check-ins play a simulated walk through the place's photos, and you can set a simulated location from the Debug menu.
 
 Run the tests with Product, Test. They check the port against numbers computed from the mockup's JavaScript.
 

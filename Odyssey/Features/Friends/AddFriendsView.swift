@@ -304,6 +304,7 @@ struct AddFriendsView: View {
         let text = "Come explore with me on Odyssey. Check in somewhere new and we both earn coins."
         let canText = contact.phone != nil && MFMessageComposeViewController.canSendText()
         inviting = InviteRequest(contact: contact, kind: canText ? .message : .share, text: text, link: inviteLink)
+        store.completeFirstStep(.friend)
     }
 
     private func add(_ match: ContactMatch) {
