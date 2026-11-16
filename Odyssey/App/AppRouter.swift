@@ -65,6 +65,8 @@ enum Route: Hashable {
 /// Flows that cover the whole screen.
 enum Cover: Identifiable, Hashable {
     case checkIn(placeID: String?)
+    /// The step by step page for an adventure, before the camera.
+    case adventure(placeID: String)
     case walkthrough(placeID: String)
     case dayShare
     case powerUp(days: Int)
@@ -81,6 +83,7 @@ enum Cover: Identifiable, Hashable {
     var id: String {
         switch self {
         case .checkIn(let id): return "checkin-\(id ?? "")"
+        case .adventure(let id): return "adventure-\(id)"
         case .walkthrough(let id): return "walk-\(id)"
         case .dayShare: return "day"
         case .powerUp(let days): return "power-\(days)"

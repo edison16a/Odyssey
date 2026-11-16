@@ -20,68 +20,61 @@ function rng(seed: string) {
   };
 }
 
-const OFFERS: Record<string, { title: string; detail: string; percent: number; priceCents: number }[]> = {
-  cafe: [
-    { title: "Free drink with any pastry", detail: "Any size drip or tea, one per visit.", percent: 100, priceCents: 0 },
-    { title: "20% off your order", detail: "Food and drinks, dine in or to go.", percent: 20, priceCents: 0 },
-    { title: "10 coffees for the price of 7", detail: "A digital punch card, valid 60 days.", percent: 30, priceCents: 2800 },
-  ],
-  food: [
-    { title: "15% off dinner", detail: "Valid after 5 PM, parties up to 4.", percent: 15, priceCents: 0 },
-    { title: "Free appetizer", detail: "With any two entrees.", percent: 100, priceCents: 0 },
+/**
+ * A short, hand-picked list of real restaurants and cafes a few minutes' walk from
+ * Y Combinator in Dogpatch. Every offer fits what the place actually sells. Deals used
+ * to be generated from place categories, which handed offices and bakeries ice cream
+ * offers ("office" contains "ice"), so they are listed by hand instead.
+ */
+const DEALS: { placeId: string; offers: { title: string; detail: string; percent: number; priceCents: number }[] }[] = [
+  { placeId: "long-bridge", offers: [
+    { title: "Free topping on any pizza", detail: "One extra topping on a whole pie, dine in or to go.", percent: 100, priceCents: 0 },
+  ] },
+  { placeId: "paper-son", offers: [
+    { title: "Free drip coffee with any pastry", detail: "One per visit.", percent: 100, priceCents: 0 },
+  ] },
+  { placeId: "the-ramp", offers: [
+    { title: "15% off brunch", detail: "Weekdays before 2 PM, parties up to 4.", percent: 15, priceCents: 0 },
+  ] },
+  { placeId: "just-for-you", offers: [
     { title: "$25 of food for $18", detail: "Credit applied at the register.", percent: 28, priceCents: 1800 },
-  ],
-  bar: [
-    { title: "Happy hour all night", detail: "Happy hour prices until close, weeknights.", percent: 25, priceCents: 0 },
-    { title: "First round 2 for 1", detail: "House drinks, one per explorer.", percent: 50, priceCents: 0 },
-  ],
-  dessert: [
-    { title: "Free topping", detail: "On any scoop or slice.", percent: 100, priceCents: 0 },
-    { title: "Buy one get one half off", detail: "Any dessert.", percent: 25, priceCents: 0 },
-  ],
-};
+  ] },
+  { placeId: "piccino", offers: [
+    { title: "Free starter with two mains", detail: "Dinner only.", percent: 100, priceCents: 0 },
+  ] },
+  { placeId: "n4057348979", offers: [
+    { title: "Second scoop half off", detail: "Any flavor, cup or cone.", percent: 25, priceCents: 0 },
+  ] },
+  { placeId: "n4521494871", offers: [
+    { title: "10% off your order", detail: "Dine in or to go.", percent: 10, priceCents: 0 },
+  ] },
+];
 
-function offerKind(cats: string): keyof typeof OFFERS | null {
-  if (/cafe|coffee|bakery|tea/.test(cats)) return "cafe";
-  if (/ice|dessert|donut|chocolate|confection/.test(cats)) return "dessert";
-  if (/bar|pub|brew|wine|night/.test(cats)) return "bar";
-  if (/restaurant|food|pizza|fast|deli|taco|burger|ramen|sushi/.test(cats)) return "food";
-  return null;
-}
-
-/** Give most SF cafes, restaurants and bars one or two deals. */
+/** Replace every deal with the hand-picked Dogpatch list above. */
 export const seed = internalMutation({
   args: {},
   handler: async (ctx) => {
     for (const d of await ctx.db.query("deals").collect()) await ctx.db.delete(d._id);
     let count = 0;
-    for (const area of ["sf-dogpatch", "sf-mission", "sf"]) {
-      const places = await ctx.db.query("places").withIndex("by_area", (q) => q.eq("area", area)).collect();
-      for (const p of places) {
-        const cats = [...(p.cats ?? []), p.category ?? ""].join(" ").toLowerCase();
-        const kind = offerKind(cats);
-        if (!kind) continue;
-        const r = rng(p.placeId + "deal");
-        if (r() < 0.25) continue;
-        const offers = OFFERS[kind];
-        const n = r() < 0.4 ? 2 : 1;
-        const start = Math.floor(r() * offers.length);
-        for (let i = 0; i < n; i++) {
-          const o = offers[(start + i) % offers.length];
-          await ctx.db.insert("deals", {
-            dealId: `${p.placeId}-${i}`,
-            placeId: p.placeId,
-            placeName: p.name,
-            ...o,
-            whopPlanId: `plan_demo_${p.placeId.slice(-6)}${i}`,
-            remaining: 5 + Math.floor(r() * 40),
-            expiresAt: Date.now() + (3 + Math.floor(r() * 25)) * 86_400_000,
-          });
-          count++;
-        }
+    const missing: string[] = [];
+    for (const { placeId, offers } of DEALS) {
+      const place = await ctx.db.query("places").withIndex("by_placeId", (q) => q.eq("placeId", placeId)).unique();
+      if (!place) { missing.push(placeId); continue; }
+      const r = rng(placeId + "deal");
+      for (const [i, o] of offers.entries()) {
+        await ctx.db.insert("deals", {
+          dealId: `${placeId}-${i}`,
+          placeId,
+          placeName: place.name,
+          ...o,
+          whopPlanId: `plan_demo_${placeId.slice(-6)}${i}`,
+          remaining: 10 + Math.floor(r() * 30),
+          expiresAt: Date.now() + (7 + Math.floor(r() * 21)) * 86_400_000,
+        });
+        count++;
       }
     }
-    return { deals: count };
+    return { deals: count, missing };
   },
 });
 

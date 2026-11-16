@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as adventures from "../adventures.js";
 import type * as amenities from "../amenities.js";
 import type * as auth from "../auth.js";
+import type * as bountyRules from "../bountyRules.js";
 import type * as contacts from "../contacts.js";
 import type * as deals from "../deals.js";
 import type * as files from "../files.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   adventures: typeof adventures;
   amenities: typeof amenities;
   auth: typeof auth;
+  bountyRules: typeof bountyRules;
   contacts: typeof contacts;
   deals: typeof deals;
   files: typeof files;

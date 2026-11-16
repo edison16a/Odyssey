@@ -97,69 +97,148 @@ struct LocationSearchField: View {
     var onSelect: (Place) -> Void
     @FocusState private var focused: Bool
 
+    private static let rowHeight: CGFloat = 58
+
+    /// What the list shows, worked out once so its height never jumps while it fills.
+    private enum Row: Identifiable {
+        case suggestion(Int, MKLocalSearchCompletion)
+        case place(Place)
+        case status(String, error: Bool)
+        case searchAll
+
+        var id: String {
+            switch self {
+            case .suggestion(let i, _): "s\(i)"
+            case .place(let p): "p" + p.id
+            case .status(let text, _): "t" + text
+            case .searchAll: "all"
+            }
+        }
+    }
+
+    private var rows: [Row] {
+        var out: [Row] = []
+        let results = Array(search.results.prefix(5))
+        if !results.isEmpty {
+            out = results.map { .place($0) }
+        } else {
+            out = search.suggestions.enumerated().map { .suggestion($0.offset, $0.element) }
+        }
+        if search.searching && results.isEmpty { out.insert(.status("Searching…", error: false), at: 0) }
+        if let error = search.error, !search.searching { out.append(.status(error, error: true)) }
+        if !search.query.isEmpty && !search.searching && results.isEmpty && search.error == nil { out.append(.searchAll) }
+        return out
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(Palette.accent)
-                TextField("Search places, addresses, or cities...", text: $search.query)
-                    .font(.system(size: 14))
+        let list = rows
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(focused ? Palette.accent : Palette.muted)
+                TextField("Search places, addresses, cities", text: $search.query)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Palette.ink)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
                     .focused($focused)
                     .onSubmit { run() }
                     .accessibilityIdentifier("worldMap.search")
-                if search.searching {
-                    ProgressView()
-                } else if !search.query.isEmpty {
-                    Button { search.query = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .accessibilityLabel("Clear search")
+                if !search.query.isEmpty || !search.results.isEmpty {
+                    Button {
+                        search.query = ""
+                        focused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Palette.faint)
+                    }
+                    .accessibilityLabel("Clear search")
                 }
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 50)
-            if focused || !search.results.isEmpty {
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(focused ? Palette.accent.opacity(0.5) : .white.opacity(0.5), lineWidth: 1))
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            if !list.isEmpty && (focused || !search.results.isEmpty || search.error != nil) {
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(Array(search.suggestions.enumerated()), id: \.offset) { _, suggestion in
-                            Button { run(suggestion) } label: {
-                                resultRow(suggestion.title, suggestion.subtitle)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        ForEach(search.results.prefix(5)) { place in
-                            Button { choose(place) } label: { resultRow(place.name, place.address ?? "") }
-                                .buttonStyle(.plain)
-                        }
-                        if focused && !search.query.isEmpty && !search.searching {
-                            Button("Search all locations") { run() }
-                                .font(.system(size: 13, weight: .semibold)).padding(12)
+                        ForEach(list) { row in
+                            if row.id != list.first?.id { Divider().padding(.leading, 56) }
+                            view(for: row)
                         }
                     }
                 }
-                .frame(maxHeight: search.suggestions.isEmpty && search.results.isEmpty ? 44 : 240)
+                .scrollBounceBehavior(.basedOnSize)
                 .scrollDismissesKeyboard(.interactively)
-            }
-            if let error = search.error {
-                Text(error).font(.caption).foregroundStyle(Palette.danger).padding(10)
+                .frame(height: min(CGFloat(list.count) * Self.rowHeight, Self.rowHeight * 5))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Palette.line))
+        .animation(.snappy(duration: 0.2), value: list.count)
+        .animation(.snappy(duration: 0.2), value: focused)
     }
 
-    private func resultRow(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
-            if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(Palette.muted) }
+    @ViewBuilder private func view(for row: Row) -> some View {
+        switch row {
+        case .suggestion(_, let suggestion):
+            Button { run(suggestion) } label: { resultRow("mappin.circle.fill", suggestion.title, suggestion.subtitle) }
+                .buttonStyle(.plain)
+        case .place(let place):
+            Button { choose(place) } label: {
+                resultRow("mappin.circle.fill", place.name, place.address ?? "",
+                          trailing: Format.distance(store.metres(to: place)))
+            }
+            .buttonStyle(.plain)
+        case .status(let text, let error):
+            HStack(spacing: 12) {
+                Group {
+                    if error { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Palette.danger) }
+                    else { ProgressView().controlSize(.small) }
+                }
+                .frame(width: 32)
+                Text(text).font(.system(size: 14, weight: .medium)).foregroundStyle(error ? Palette.danger : Palette.muted)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: Self.rowHeight)
+        case .searchAll:
+            Button { run() } label: {
+                resultRow("magnifyingglass.circle.fill", "Search for \u{201C}\(search.query)\u{201D}", "", accent: true)
+            }
+            .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14).padding(.vertical, 10)
     }
 
+    private func resultRow(_ icon: String, _ title: String, _ subtitle: String,
+                           trailing: String? = nil, accent: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 26))
+                .foregroundStyle(accent ? Palette.accent : Palette.danger.opacity(0.85))
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(accent ? Palette.accent : Palette.ink).lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            if let trailing { Text(trailing).font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.muted) }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Self.rowHeight)
+        .contentShape(Rectangle())
+    }
+
+    /// Keep the list open while it searches, so it doesn't close and reopen.
     private func run(_ completion: MKLocalSearchCompletion? = nil) {
-        focused = false
         Task {
-            if let place = await search.search(completion, store: store), completion != nil { choose(place) }
+            let place = await search.search(completion, store: store)
+            if let place, completion != nil || search.results.count == 1 { choose(place) }
         }
     }
 
