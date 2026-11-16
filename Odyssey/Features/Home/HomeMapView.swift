@@ -31,6 +31,8 @@ struct HomeMapView: View {
 
     var destinations: [Place] = []
     var selectedDestination: Place?
+    /// Points below the top safe area for the compass, when controls cover the usual corner.
+    var compassTop: CGFloat? = nil
     var onCamera: (MKCoordinateRegion) -> Void = { _ in }
 
     @State private var layer = HomeExploredLayer()
@@ -64,7 +66,7 @@ struct HomeMapView: View {
 
     var body: some View {
         GeometryReader { geo in
-            HomeMapCanvas(position: position, scene: scene, revision: revision,
+            HomeMapCanvas(position: position, scene: scene, revision: revision, compassTop: compassTop,
                           onCamera: cameraMoved, onPin: pick, onBounty: onBounty, onAmenity: pickAmenity,
                           onMapItem: { onPick(LocationSearch.register($0, store: store)) },
                           onUserMove: { position = $0 })

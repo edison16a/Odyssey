@@ -34,15 +34,6 @@ struct TasteProfile {
     var dayParts: [Double]
     var thumbs: [Thumb]
 
-    private static let personas: [String: (String, String, String)] = [
-        "coffee": ("Cafe Hopper", "cup.and.saucer.fill", "#b8742a"), "food": ("Food Scout", "fork.knife", "#e8553d"),
-        "study": ("Deep Worker", "laptopcomputer", "#2b59ff"), "library": ("Bookworm", "book.fill", "#6b4bd8"),
-        "park": ("Open Air Wanderer", "leaf.fill", "#17a35a"), "shopping": ("Treasure Hunter", "bag.fill", "#d6457f"),
-        "entertainment": ("Culture Seeker", "theatermasks.fill", "#8a5cff"), "nightlife": ("Night Owl", "moon.stars.fill", "#3b3f8f"),
-        "dessert": ("Sweet Tooth", "birthday.cake.fill", "#f08aa8"), "fitness": ("Mover", "figure.run", "#ff7a1a"),
-        "gas": ("Road Tripper", "car.fill", "#4a5568"),
-    ]
-
     @MainActor
     init(store: AppStore) {
         let w = store.state.taste.weights
@@ -66,12 +57,9 @@ struct TasteProfile {
             store.seed.discoverCategory(pair.key).map { ($0.label, $0.icon, pair.value) }
         }
 
-        let topCat = likes.first { $0.id.hasPrefix("cat:") }.map { String($0.id.dropFirst(4)) } ?? kinds.max { $0.value < $1.value }?.key
-        if let topCat, let p = Self.personas[topCat] {
-            persona = (p.0, p.1, Color(hex: p.2))
-        } else {
-            persona = ("Curious Explorer", "safari.fill", Palette.accent)
-        }
+        // Same explorer type as the badge that opened this page (Cafe Hopper by default).
+        let gem = TasteGem.of(store)
+        persona = (gem.persona, gem.icon, gem.colors.first ?? Palette.accent)
 
         interests = store.state.interests.filter(\.value).keys.sorted().map { store.seed.interestLabels[$0] ?? $0.capitalized }
 

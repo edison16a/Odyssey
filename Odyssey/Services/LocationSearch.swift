@@ -20,6 +20,11 @@ final class LocationSearch: NSObject, MKLocalSearchCompleterDelegate {
     var results: [Place] = []
     var searching = false
     var error: String?
+    /// Where to look first. Suggestions and searches favour this area but can still find
+    /// places anywhere. Callers keep it on the map's view or the person's area.
+    var region: MKCoordinateRegion? {
+        didSet { if let region { completer.region = region } }
+    }
     @ObservationIgnored private let completer = MKLocalSearchCompleter()
     @ObservationIgnored private var activeSearch: MKLocalSearch?
     @ObservationIgnored private var generation = 0
@@ -32,14 +37,20 @@ final class LocationSearch: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        let fragment = completer.queryFragment
+        let results = Array(completer.results.prefix(6))
         Task { @MainActor in
-            self.suggestions = self.query.isEmpty ? [] : Array(completer.results.prefix(6))
+            // Ignore answers to text that has since changed, so the list never lags behind.
+            guard !self.query.isEmpty, fragment == self.query, self.results.isEmpty else { return }
+            self.suggestions = results
         }
     }
 
+    /// Suggestions are a convenience. When they fail (an emptied field, a throttled or
+    /// offline request) the list just stays empty; pressing Search still runs a full search.
     nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        let message = error.localizedDescription
-        Task { @MainActor in self.error = message }
+        let fragment = completer.queryFragment
+        Task { @MainActor in if fragment == self.query { self.suggestions = [] } }
     }
 
     func search(_ completion: MKLocalSearchCompletion? = nil, store: AppStore) async -> Place? {
@@ -51,6 +62,7 @@ final class LocationSearch: NSObject, MKLocalSearchCompleterDelegate {
         let request = completion.map { MKLocalSearch.Request(completion: $0) } ?? MKLocalSearch.Request()
         if completion == nil { request.naturalLanguageQuery = text }
         request.resultTypes = [.address, .pointOfInterest]
+        if completion == nil, let region { request.region = region }
         let search = MKLocalSearch(request: request)
         activeSearch = search
         searching = true
@@ -64,7 +76,11 @@ final class LocationSearch: NSObject, MKLocalSearchCompleterDelegate {
             if results.isEmpty { error = "No places found. Try a fuller address or add a city." }
             return results.first
         } catch {
-            if token == generation, !Task.isCancelled { self.error = "Search unavailable. Please try again." }
+            guard token == generation, !Task.isCancelled else { return nil }
+            let code = (error as? MKError)?.code
+            self.error = code == .placemarkNotFound || code == .directionsNotFound
+                ? "No places found. Try a fuller address or add a city."
+                : "Search isn't available right now. Check your connection and try again."
             return nil
         }
     }
@@ -175,10 +191,10 @@ struct LocationSearchField: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
-                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                .transaction { $0.animation = nil }
             }
         }
-        .animation(.snappy(duration: 0.2), value: list.count)
+        .animation(.snappy(duration: 0.2), value: list.isEmpty)
         .animation(.snappy(duration: 0.2), value: focused)
     }
 
@@ -245,6 +261,8 @@ struct LocationSearchField: View {
     private func choose(_ place: Place) {
         focused = false
         search.query = ""
+        search.suggestions = []
+        search.error = nil
         onSelect(place)
     }
 }

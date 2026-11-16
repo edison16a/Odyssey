@@ -55,6 +55,8 @@ struct HomeMapCanvas: UIViewRepresentable, Equatable {
     var position: MapCameraPosition
     var scene: HomeMapScene
     var revision: Int
+    /// Move the compass this far below the top safe area (nil keeps MapKit's spot).
+    var compassTop: CGFloat? = nil
     var onCamera: (MKCoordinateRegion) -> Void
     var onPin: (String) -> Void
     var onBounty: (Bounty) -> Void
@@ -77,7 +79,21 @@ struct HomeMapCanvas: UIViewRepresentable, Equatable {
         map.preferredConfiguration = configuration
         map.selectableMapFeatures = [.pointsOfInterest, .physicalFeatures, .territories]
         map.delegate = context.coordinator
+        // The location dot takes the map's tint; keep it Odyssey blue, not the app's ink.
+        map.tintColor = UIColor(Palette.accent)
         map.register(HomeMapMarkerView.self, forAnnotationViewWithReuseIdentifier: HomeMapMarkerView.reuseID)
+        if let compassTop {
+            // The search bar covers MapKit's compass corner, so show our own one lower down.
+            map.showsCompass = false
+            let compass = MKCompassButton(mapView: map)
+            compass.compassVisibility = .adaptive
+            compass.translatesAutoresizingMaskIntoConstraints = false
+            map.addSubview(compass)
+            NSLayoutConstraint.activate([
+                compass.topAnchor.constraint(equalTo: map.safeAreaLayoutGuide.topAnchor, constant: compassTop),
+                compass.trailingAnchor.constraint(equalTo: map.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            ])
+        }
         return map
     }
 

@@ -42,7 +42,12 @@ final class LocationService: NSObject {
         self.store = store
         manager.activityType = .fitness
         applyBackgroundTracking(store.state.trackInBackground)
-        if isAuthorized { manager.startUpdatingLocation() }
+        if isAuthorized {
+            manager.startUpdatingLocation()
+        } else if authorization == .notDetermined, store.state.session.onboarded {
+            // People who finished onboarding before it asked (or skipped it) still get asked once.
+            manager.requestWhenInUseAuthorization()
+        }
     }
 
     var isAuthorized: Bool {
@@ -70,7 +75,8 @@ final class LocationService: NSObject {
             waiters[requestID] = continuation
             if isAuthorized { manager.requestLocation() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in
-                self?.waiters.removeValue(forKey: requestID)?.resume(returning: nil)
+                // No fresh fix in time: the last known position beats nothing.
+                self?.waiters.removeValue(forKey: requestID)?.resume(returning: self?.isAuthorized == true ? self?.coordinate : nil)
             }
         }
     }
@@ -141,6 +147,8 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        // "Location unknown" is temporary; Core Location keeps trying, so keep waiting for a fix.
+        if (error as? CLError)?.code == .locationUnknown { return }
         let message = error.localizedDescription
         Task { @MainActor in
             self.lastError = message
