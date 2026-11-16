@@ -10,7 +10,6 @@ struct WorldMapView: View {
     @State private var preview: Place?
     @State private var bounty: Bounty?
     @State private var amenity: AmenityPoint?
-    @State private var showInfo = false
     @State private var showBounties = false
     /// The Home preview keeps its own camera, zoom and layers. Sharing the World Map's made
     /// the two maps (one hidden in another tab) keep moving and re-zooming each other.
@@ -38,7 +37,12 @@ struct WorldMapView: View {
                         onBounty: { bounty = $0 }, amenities: isPreview ? previewAmenities : map.amenityKinds,
                         onAmenity: { amenity = $0 }, destinations: isPreview ? [] : map.results,
                         selectedDestination: isPreview ? nil : map.selectedPlace,
-                        onCamera: { if !isPreview && !paused { map.region = $0 } })
+                        compassTop: isPreview ? nil : 132,
+                        onCamera: {
+                            guard !isPreview, !paused else { return }
+                            map.region = $0
+                            map.search.region = $0
+                        })
                 // Full screen: the map runs under the status bar and the tab bar.
                 .ignoresSafeArea(edges: isPreview ? [] : .all)
             if isPreview {
@@ -99,7 +103,6 @@ struct WorldMapView: View {
         .sheet(item: $amenity) { point in
             AmenitySheet(point: point).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showInfo) { BountyInfoSheet() }
         .sheet(isPresented: $showBounties) { bountyList }
         .alert("Location unavailable", isPresented: Binding(get: { locationError != nil }, set: { if !$0 { locationError = nil } })) {
             if location.isDenied {
@@ -113,19 +116,16 @@ struct WorldMapView: View {
 
     private var searchOpen: Bool {
         let search = store.worldMap.search
-        return !search.query.isEmpty || !search.results.isEmpty || search.error != nil
+        // Only while there is text: a leftover error must never hide Set bounty and the chips.
+        return !search.query.isEmpty
     }
 
     private var top: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                LocationSearchField(search: store.worldMap.search) { place in
-                    clearNearby()
-                    pick(place)
-                }
-                roundButton("gift.fill", badge: store.openBounties.count, label: "View available bounties") {
-                    showBounties = true
-                }
+            // Full width: nothing sits in the top corner over the map's own controls.
+            LocationSearchField(search: store.worldMap.search) { place in
+                clearNearby()
+                pick(place)
             }
             if !searchOpen {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -143,14 +143,28 @@ struct WorldMapView: View {
                         }
                         .buttonStyle(PressStyle(scale: 0.95))
                         .accessibilityIdentifier("worldMap.setBounty")
-                        Button { showInfo = true } label: {
-                            Image(systemName: "questionmark")
-                                .font(.system(size: 13, weight: .heavy))
-                                .frame(width: 38, height: 38)
-                                .background(.regularMaterial, in: Circle())
+                        Button {
+                            Haptics.tap()
+                            showBounties = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gift.fill").font(.system(size: 12, weight: .bold))
+                                Text("Bounties").font(.system(size: 14, weight: .semibold))
+                                if !store.openBounties.isEmpty {
+                                    Text("\(store.openBounties.count)")
+                                        .font(.system(size: 11, weight: .heavy)).monospacedDigit()
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                                        .background(Palette.danger, in: Capsule())
+                                }
+                            }
+                            .foregroundStyle(Palette.ink)
+                            .padding(.horizontal, 14).frame(height: 38)
+                            .background(.regularMaterial, in: Capsule())
+                            .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
                         }
-                        .buttonStyle(PressStyle(scale: 0.9))
-                        .accessibilityLabel("What are bounties?")
+                        .buttonStyle(PressStyle(scale: 0.95))
+                        .accessibilityLabel("Available bounties, \(store.openBounties.count)")
                         ForEach(NearbyCategory.allCases) { category in
                             if category != .accessible || hasAccessibleData { nearbyChip(category) }
                         }
@@ -193,29 +207,6 @@ struct WorldMapView: View {
         }
         .buttonStyle(PressStyle(scale: 0.95))
         .accessibilityLabel(category.title)
-    }
-
-    private func roundButton(_ icon: String, badge: Int = 0, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .frame(width: 50, height: 50)
-                .background(.regularMaterial, in: Circle())
-                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
-                .overlay(alignment: .topTrailing) {
-                    if badge > 0 {
-                        Text("\(badge)")
-                            .font(.system(size: 11, weight: .heavy)).monospacedDigit()
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5).frame(minWidth: 20, minHeight: 20)
-                            .background(Palette.danger, in: Capsule())
-                            .offset(x: 4, y: -4)
-                    }
-                }
-        }
-        .buttonStyle(PressStyle(scale: 0.92))
-        .accessibilityLabel(label)
     }
 
     private var showsTray: Bool { activeCategory != nil && store.worldMap.nearbyTitle != nil && !finding }
@@ -361,6 +352,8 @@ struct WorldMapView: View {
             locationError = location.isDenied ? "Allow location access in Settings to center on your position. You can still search anywhere." : "A GPS fix isn't available. Please try again."
             return
         }
+        // Asking to see where you are means the map should follow the phone from now on.
+        if !store.state.useDeviceLocation { store.update { $0.useDeviceLocation = true } }
         store.worldMap.fly(to: coord)
     }
 

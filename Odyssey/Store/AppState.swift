@@ -49,8 +49,8 @@ nonisolated struct AppState: Codable, Sendable {
 
     nonisolated struct Equipped: Codable, Sendable {
         var frame = "dual"
-        var banner = "streak-spark"
-        var effect = "vines"
+        var banner = "city-san-francisco"
+        var effect = "embers"
         var title = "trailblazer"
         var explorer = "ibn-battuta"
         var badges: [String] = ["first-explorer", "scholar", "streak-7"]
@@ -90,7 +90,7 @@ nonisolated struct AppState: Codable, Sendable {
         var gps: Bool?
     }
 
-    var version = 8
+    var version = 9
     var session = Session()
     var interests: [String: Bool] = ["startups": true, "coffee": true, "culture": true]
     var user = User()
@@ -98,7 +98,8 @@ nonisolated struct AppState: Codable, Sendable {
     var streak = Streak()
     var stats = Stats()
     /// The default look (Dual Element, Sparkler Globie, Ivy Vines, Trailblazer) is owned from the start.
-    var owned: [String] = ["frame-dual", "banner-streak-spark", "effect-vines", "title-trailblazer"]
+    var owned: [String] = ["frame-dual", "banner-streak-spark", "effect-vines", "title-trailblazer",
+                           "banner-city-san-francisco", "effect-embers"]
     var equipped = Equipped()
     var earnedBadges: [String] = []
     var boosts: [String: Int] = ["xp2": 0, "streak-freeze": 1]
@@ -256,6 +257,12 @@ nonisolated struct AppState: Codable, Sendable {
             equipped.banner = d.equipped.banner
             equipped.effect = d.equipped.effect
             equipped.title = d.equipped.title
+            for id in d.owned where !owned.contains(id) { owned.append(id) }
+        }
+        // Version 9: Ember Drift and the San Francisco banner become the defaults.
+        if savedVersion < 9 {
+            equipped.banner = d.equipped.banner
+            equipped.effect = d.equipped.effect
             for id in d.owned where !owned.contains(id) { owned.append(id) }
         }
         version = d.version
