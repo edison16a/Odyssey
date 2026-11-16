@@ -37,6 +37,8 @@ final class Cloud {
     /// Supermemory profile facts from the last recommendation, for the taste page.
     private(set) var profileFacts: [String] = []
     private(set) var usedSupermemory = false
+    /// How many Supermemory memories the last ranking read.
+    private(set) var memoriesUsed = 0
 
     @ObservationIgnored private weak var store: AppStore?
     @ObservationIgnored private let api = ConvexAPI.shared
@@ -154,8 +156,10 @@ final class Cloud {
         guard signedIn, let store else { return }
         let s = store.state
         do {
-            let data = try JSONEncoder().encode(s)
-            let json = String(decoding: data, as: UTF8.self)
+            // Off the main thread: with a long walking history this is a lot of JSON.
+            let json = try await Task.detached(priority: .utility) {
+                String(decoding: try JSONEncoder().encode(s), as: UTF8.self)
+            }.value
             try await api.mutation("users:saveState", ["version": Double(s.version), "state": json])
 
             let statsKey = "\(s.wallet.coins)|\(s.wallet.xp)|\(s.wallet.points)|\(s.wallet.cash)|\(s.streak.days)|\(s.stats.explored)|\(s.stats.contributions)|\(s.firsts.count)"
@@ -320,7 +324,7 @@ final class Cloud {
                       let lat = (r["lat"] as? NSNumber)?.doubleValue, let lng = (r["lng"] as? NSNumber)?.doubleValue else { return nil }
                 return AmenityPoint(id: id, kind: kind, name: r["name"] as? String ?? kind.capitalized, coord: Coord(lat, lng),
                                     note: r["note"] as? String ?? "", access: r["access"] as? String ?? "public",
-                                    placeID: r["placeId"] as? String)
+                                    placeID: r["placeId"] as? String, verified: r["verified"] as? Bool ?? false)
             }
             store?.placeFeatures = features
             store?.amenityPoints = points
@@ -346,20 +350,30 @@ final class Cloud {
     /// Live bounties from every explorer, so a bounty pushed on one phone shows on the map everywhere.
     func loadLiveBounties() async {
         guard let rows = try? await api.query("social:bounties") as? [[String: Any]] else { return }
-        let list: [Bounty] = rows.compactMap { row in
-            var r = row
-            r.removeValue(forKey: "_owner")
-            r.removeValue(forKey: "mine")
-            guard let data = try? JSONSerialization.data(withJSONObject: r) else { return nil }
-            return try? JSONDecoder().decode(Bounty.self, from: data)
+        func decode(_ rows: [[String: Any]], owned: Bool = false) -> [Bounty] {
+            rows.compactMap { row in
+                var dataRow = row
+                if !owned { dataRow.removeValue(forKey: "mine") }
+                guard let data = try? JSONSerialization.data(withJSONObject: dataRow) else { return nil }
+                return try? JSONDecoder().decode(Bounty.self, from: data)
+            }
+        }
+        var list = decode(rows)
+        if signedIn, let owned = try? await api.query("social:myBounties") as? [[String: Any]] {
+            let history = decode(owned, owned: true)
+            let ids = Set(history.map(\.id))
+            list.removeAll { ids.contains($0.id) }
+            list += history
         }
         store?.liveBounties = list
+        store?.bountyRevision += 1
     }
 
     struct BountyCheckout {
         var bountyID: String
         var url: URL
         var amount: Double
+        var sandbox: Bool
     }
 
     /// Make a Whop checkout for a bounty (pool plus the 10% fee). The bounty goes live once it is paid.
@@ -368,10 +382,11 @@ final class Cloud {
         let json = try JSONSerialization.jsonObject(with: data)
         let out = try await api.action("whop:createBountyCheckout", ["bounty": json], timeout: 25)
         guard let d = out as? [String: Any], let id = d["bountyId"] as? String,
-              let link = d["url"] as? String, let url = URL(string: link) else {
+              let link = d["url"] as? String, let url = URL(string: link), url.scheme == "https",
+              let amount = (d["amount"] as? NSNumber)?.doubleValue, amount.isFinite, amount > 0 else {
             throw NSError(domain: "Odyssey", code: 1, userInfo: [NSLocalizedDescriptionKey: "Whop did not return a checkout"])
         }
-        return BountyCheckout(bountyID: id, url: url, amount: (d["amount"] as? NSNumber)?.doubleValue ?? bounty.pool * 1.1)
+        return BountyCheckout(bountyID: id, url: url, amount: amount, sandbox: d["sandbox"] as? Bool ?? true)
     }
 
     /// "pending", "paid" or "missing". Asks Whop directly when `sync` is set, in case the webhook is slow.
@@ -382,6 +397,27 @@ final class Cloud {
         }
         let d = try? await api.query("whop:bountyStatus", ["bountyId": bountyID]) as? [String: Any]
         return d?["status"] as? String ?? "pending"
+    }
+
+    /// Use the server's funded record, including its payment-time expiry, instead of the draft.
+    func paidBounty(_ bountyID: String) async -> Bounty? {
+        guard let out = try? await api.query("whop:bountyStatus", ["bountyId": bountyID]) as? [String: Any],
+              out["status"] as? String == "paid", let bounty = out["bounty"] as? [String: Any],
+              let data = try? JSONSerialization.data(withJSONObject: bounty) else { return nil }
+        return try? JSONDecoder().decode(Bounty.self, from: data)
+    }
+
+    struct BountyQuote: Decodable {
+        var pool: Double
+        var platformFee: Double
+        var totalAmount: Double
+        var sandbox: Bool
+    }
+
+    func bountyQuote(_ pool: Double) async -> BountyQuote? {
+        guard let out = try? await api.query("whop:quote", ["pool": pool]),
+              let data = try? JSONSerialization.data(withJSONObject: out) else { return nil }
+        return try? JSONDecoder().decode(BountyQuote.self, from: data)
     }
 
     /// Claim a deal through (mock) Whop. Returns the code to show at the counter.
@@ -398,15 +434,34 @@ final class Cloud {
         send("social:setFriend", ["friendKey": id, "status": status])
     }
 
+    // MARK: Contacts
+
+    /// Explorers whose phone or email matches one of these SHA-256 hashes
+    /// (hashed on the phone, see ContactsService). Also makes you findable by
+    /// your own phone and email. Empty when signed out.
+    func matchContacts(hashes: [String]) async throws -> [ContactMatch] {
+        guard signedIn, !hashes.isEmpty else { return [] }
+        _ = try? await api.mutation("contacts:registerMine")
+        var byUser: [String: ContactMatch] = [:]
+        for start in stride(from: 0, to: hashes.count, by: 1000) {
+            let chunk = Array(hashes[start..<min(start + 1000, hashes.count)])
+            let rows = try await api.query("contacts:match", ["hashes": chunk]) as? [[String: Any]] ?? []
+            for row in rows {
+                guard let match = ContactMatch(row) else { continue }
+                if var existing = byUser[match.userId] {
+                    existing.hashes = Array(Set(existing.hashes + match.hashes))
+                    byUser[match.userId] = existing
+                } else {
+                    byUser[match.userId] = match
+                }
+            }
+        }
+        return Array(byUser.values)
+    }
+
     func recordLike(_ postId: String, on: Bool) {
         guard signedIn else { return }
         send("social:setLike", ["postKey": postId, "on": on])
-    }
-
-    func recordBounty(_ bounty: Bounty) {
-        guard signedIn, let data = try? JSONEncoder().encode(bounty),
-              let json = try? JSONSerialization.jsonObject(with: data) else { return }
-        send("social:postBounty", ["bounty": json])
     }
 
     func recordGiftCard(_ card: AppState.RedeemedCard) {
@@ -467,6 +522,7 @@ final class Cloud {
         rankedPools.insert(key)
         profileFacts = dict["profileFacts"] as? [String] ?? profileFacts
         usedSupermemory = dict["usedSupermemory"] as? Bool ?? false
+        memoriesUsed = (dict["memoriesUsed"] as? Double).map(Int.init) ?? (dict["memoriesUsed"] as? Int) ?? 0
         store.mergeCloudPicks(out)
     }
 
@@ -557,6 +613,7 @@ struct AmenityPoint: Identifiable, Equatable, Sendable {
     var note: String
     var access: String // "public" | "customers"
     var placeID: String?
+    var verified = false
 
     var icon: String {
         switch kind {
@@ -581,6 +638,9 @@ struct Deal: Identifiable, Equatable, Sendable {
     var remaining: Int
     var expiresAt: Date
 
+    /// No card needed: these deals are bought with coins instead.
     var isFree: Bool { priceCents == 0 }
-    var priceText: String { isFree ? "Free" : String(format: "$%.2f", Double(priceCents) / 100) }
+    /// What a coin deal costs: 20 coins per percent off, at least 200, in steps of 50.
+    var coinPrice: Int { isFree ? max(200, (percent * 20 + 25) / 50 * 50) : 0 }
+    var priceText: String { isFree ? "\(coinPrice.formatted()) coins" : String(format: "$%.2f", Double(priceCents) / 100) }
 }

@@ -91,7 +91,12 @@ struct WhopCheckoutSheet: View {
                 }
                 Divider().overlay(Palette.line)
                 row("Price", deal.priceText)
-                row("Fees", "$0.00")
+                if deal.isFree {
+                    row("Your coins", store.state.wallet.coins.formatted())
+                    row("After", max(0, store.state.wallet.coins - deal.coinPrice).formatted())
+                } else {
+                    row("Fees", "$0.00")
+                }
                 HStack {
                     Text("Total").font(.system(size: 16, weight: .heavy))
                     Spacer()
@@ -141,14 +146,20 @@ struct WhopCheckoutSheet: View {
                 .foregroundStyle(Palette.danger)
             }
 
+            if deal.isFree && !canAfford {
+                Text("You need \((deal.coinPrice - store.state.wallet.coins).formatted()) more coins. Check in somewhere new to earn them.")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button(action: pay) {
                 HStack(spacing: 10) {
                     if paying {
                         ProgressView().tint(.white)
                         Text("Processing…").font(.system(size: 17, weight: .heavy))
                     } else {
-                        Image(systemName: deal.isFree ? "gift.fill" : "lock.fill").font(.system(size: 15, weight: .bold))
-                        Text(deal.isFree ? "Claim free" : "Pay \(deal.priceText)").font(.system(size: 17, weight: .heavy))
+                        if deal.isFree { CoinIcon(size: 18) } else { Image(systemName: "lock.fill").font(.system(size: 15, weight: .bold)) }
+                        Text(deal.isFree ? "Buy for \(deal.priceText)" : "Pay \(deal.priceText)").font(.system(size: 17, weight: .heavy))
                     }
                 }
                 .foregroundStyle(.white)
@@ -158,11 +169,13 @@ struct WhopCheckoutSheet: View {
                 .shadow(color: DealStyle.whop.opacity(0.35), radius: 10, y: 4)
             }
             .buttonStyle(PressStyle(scale: 0.97))
-            .disabled(paying)
+            .disabled(paying || !canAfford)
+            .opacity(canAfford ? 1 : 0.45)
 
             HStack(spacing: 6) {
                 WhopMark(size: 14)
-                Text("Payments by Whop. No real money moves in test mode.")
+                Text(deal.isFree ? "Coins are taken from your Odyssey balance. Code issued by Whop."
+                                 : "Payments by Whop. No real money moves in test mode.")
                     .font(.system(size: 11)).foregroundStyle(Palette.muted)
             }
             .frame(maxWidth: .infinity)
@@ -178,8 +191,10 @@ struct WhopCheckoutSheet: View {
         }
     }
 
+    private var canAfford: Bool { !deal.isFree || store.state.wallet.coins >= deal.coinPrice }
+
     private func pay() {
-        guard phase == .review else { return }
+        guard phase == .review, canAfford else { return }
         Haptics.tap()
         error = nil
         withAnimation(.easeOut(duration: 0.2)) { phase = .paying }
@@ -187,6 +202,11 @@ struct WhopCheckoutSheet: View {
             try? await Task.sleep(for: .milliseconds(1200))
             do {
                 let code = try await Cloud.shared.claimDeal(deal)
+                if deal.isFree {
+                    let price = deal.coinPrice
+                    store.update { s in s.wallet.coins = max(0, s.wallet.coins - price) }
+                    toast.show("-\(price.formatted()) coins", icon: "check")
+                }
                 Haptics.success()
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { phase = .done(code) }
             } catch {
@@ -224,7 +244,7 @@ struct DealTicket: View {
             }
             .frame(height: 120)
             VStack(spacing: 4) {
-                Text(deal.isFree ? "Deal claimed!" : "Payment complete!")
+                Text(deal.isFree ? "Deal bought!" : "Payment complete!")
                     .font(.system(size: 24, weight: .heavy)).tracking(-0.5).foregroundStyle(Palette.ink)
                 Text(deal.title + (deal.placeName.isEmpty ? "" : " at \(deal.placeName)"))
                     .font(.system(size: 14)).foregroundStyle(Palette.muted)

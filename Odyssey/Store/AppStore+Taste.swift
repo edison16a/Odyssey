@@ -141,6 +141,49 @@ extension AppStore {
             .map(\.0)
     }
 
+    /// The explorer's strongest kinds of place (gem keys such as "coffee" or "entertainment"), strongest first.
+    func topTasteKinds(_ count: Int = 3) -> [String] {
+        let traits = TasteGem.of(self).traits
+        let keys = traits.compactMap { trait in TasteGem.kinds.first { $0.value.3 == trait }?.key }
+        return Array(keys.prefix(count))
+    }
+
+    /// Reorder a ranked list so it shows your whole taste, not one category:
+    /// never three of the same kind in a row, and the first `head` cards hold
+    /// at least one place from each of your top kinds when the list has one.
+    /// Otherwise the ranking is kept. `recent` is what was dealt just before.
+    func tasteMix(_ ranked: [Place], after recent: [Place] = [], head: Int = 6) -> [Place] {
+        let kinds = topTasteKinds()
+        func cats(_ p: Place) -> [String] { tasteCategories(p) }
+        func primary(_ p: Place) -> String { cats(p).first ?? "" }
+        var rest = ranked
+        var out: [Place] = []
+        var history = recent.suffix(2).map(primary)
+        var needed = kinds.filter { k in ranked.contains { cats($0).contains(k) } }
+        func triples(_ p: Place) -> Bool {
+            let k = primary(p)
+            return !k.isEmpty && history.count >= 2 && history.suffix(2).allSatisfy { $0 == k }
+        }
+        while !rest.isEmpty {
+            var allowed = rest.indices.filter { !triples(rest[$0]) }
+            if allowed.isEmpty { allowed = Array(rest.indices) }
+            var pick = allowed[0]
+            if out.count < head, !needed.isEmpty {
+                let covering = allowed.filter { i in cats(rest[i]).contains { needed.contains($0) } }
+                // Lead with your top kinds: the best place of a kind not shown yet beats a better ranked one of another kind.
+                if let first = covering.first, !cats(rest[pick]).contains(where: { needed.contains($0) }) {
+                    pick = first
+                }
+            }
+            let place = rest.remove(at: pick)
+            let placeCats = cats(place)
+            needed.removeAll { placeCats.contains($0) }
+            history.append(primary(place))
+            out.append(place)
+        }
+        return out
+    }
+
     private func similarLiked(_ place: Place) -> String? {
         let mine = Set(features(place).filter { !$0.hasPrefix("cat:") })
         var best: (name: String, shared: Int)?

@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",
-    "seed": "node tools/convex-seed.mjs"
+    "seed": "node tools/convex-seed.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p convex/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "convex-test": "^0.0.71",
     "jose": "^6.2.17",
-    "typescript": "5.9"
+    "typescript": "5.9",
+    "vitest": "^5.1.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

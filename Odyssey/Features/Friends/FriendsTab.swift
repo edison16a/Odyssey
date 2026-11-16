@@ -50,7 +50,7 @@ struct FriendsTab: View {
                 }
             }
             .background(Palette.surface)
-            .onChange(of: router.scrollToTop[.friends] ?? 0) { _, _ in
+            .onChange(of: router.scrollToTop[router.tab] ?? 0) { _, _ in
                 withAnimation { proxy.scrollTo("top", anchor: .top) }
             }
         }
@@ -58,9 +58,9 @@ struct FriendsTab: View {
 
     private var header: some View {
         HStack(spacing: Space.s2) {
+            IconButton(icon: "back", label: "Back") { router.pop() }
             Text("Friends").titleStyle(30).frame(maxWidth: .infinity, alignment: .leading)
             IconButton(icon: "plus", label: "Add friends") { router.push(.addFriends) }
-                .guideSpot(.addFriend)
         }
         .padding(.horizontal, Space.s5)
         .padding(.top, 6)

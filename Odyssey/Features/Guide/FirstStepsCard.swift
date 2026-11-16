@@ -12,7 +12,6 @@ import SwiftUI
 
 struct FirstStepsCard: View {
     @Environment(AppStore.self) private var store
-    @Environment(AppRouter.self) private var router
     @Environment(Guide.self) private var guide
     @Environment(RewardPopCenter.self) private var rewardPop
     @State private var shine = false
@@ -105,10 +104,7 @@ struct FirstStepsCard: View {
         case .tour: guide.startWelcome(store: store)
         case .save: guide.startExplore()
         case .checkIn: guide.startCheckIn(store: store)
-        case .friend:
-            router.paths[.friends] = []
-            router.tab = .friends
-            guide.startFriend()
+        case .friend: guide.startFriend()
         }
     }
 

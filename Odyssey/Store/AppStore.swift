@@ -13,10 +13,25 @@ import Observation
 
 @Observable
 final class AppStore {
-    var state: AppState
+    /// Everything the app remembers. Reading it from a screen makes that screen redraw
+    /// when it changes, so changes nothing on screen depends on go through updateQuietly.
+    @ObservationIgnored var state: AppState {
+        _read {
+            access(keyPath: \.state)
+            yield raw
+        }
+        set {
+            withMutation(keyPath: \.state) { raw = newValue }
+        }
+    }
+    @ObservationIgnored private var raw: AppState
+    /// Bumped when a new stretch of walking is saved. Footprints are recorded quietly
+    /// (see updateQuietly), and the few screens that draw them watch this instead.
+    private(set) var footprintsRevision = 0
     let seed = Seed.shared
 
     /// OpenStreetMap places seen this session, so a place page can open them by id.
+    var worldMap = WorldMapState()
     var osmPlaces: [String: Place] = [:]
     /// Demo amenity tags by place id (wifi, seating, bathroom...), from Convex.
     var placeFeatures: [String: [String]] = [:]
@@ -26,6 +41,7 @@ final class AppStore {
     var deals: [String: [Deal]] = [:]
     /// Bounties every explorer has paid for and pushed live, from Convex.
     var liveBounties: [Bounty] = []
+    var bountyRevision = 0
     /// The phone's location, kept up to date by LocationService.
     var deviceLocation: Coord?
     var deviceLabel: String?
@@ -46,26 +62,36 @@ final class AppStore {
 
     init() {
         if let saved = SharedStore.read(AppState.self, from: fileName) {
-            state = saved
+            raw = saved
         } else {
-            state = Seed.shared.initialState
-            state.widgetPrefs = SharedStore.prefs()
+            raw = Seed.shared.initialState
+            raw.widgetPrefs = SharedStore.prefs()
         }
     }
 
     /// For previews and tests: a fresh copy of the seeded state that is never saved.
     init(preview: Bool) {
         persists = false
-        state = Seed.shared.initialState
-        state.session.signedIn = true
-        state.session.onboarded = true
+        raw = Seed.shared.initialState
+        raw.session.signedIn = true
+        raw.session.onboarded = true
     }
 
     /// Change state, save it and let the widgets know.
     func update(_ change: (inout AppState) -> Void) {
-        change(&state)
+        withMutation(keyPath: \.state) { change(&raw) }
         version += 1
         save()
+    }
+
+    /// Change state without redrawing every screen that reads it. For bookkeeping that
+    /// happens on its own while you use the app (walked footprints, places Explore has
+    /// shown you): redrawing all four tabs for those made scrolling hitch. Anything a
+    /// screen shows must use update, or bump a revision the screen watches.
+    func updateQuietly(footprints: Bool = false, _ change: (inout AppState) -> Void) {
+        change(&raw)
+        if footprints { footprintsRevision += 1 }
+        save(widgets: false)
     }
 
     /// Cached results rebuild on the next read (after server data arrives, say).
@@ -84,7 +110,7 @@ final class AppStore {
     }
 
     /// Saving waits for a quiet moment and writes on a background queue, so taps never wait on the disk.
-    func save() {
+    func save(widgets: Bool = true) {
         guard persists else { return }
         saveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -92,7 +118,7 @@ final class AppStore {
         }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-        scheduleWidgetRefresh()
+        if widgets { scheduleWidgetRefresh() }
         Cloud.shared.stateChanged()
     }
 
@@ -100,18 +126,20 @@ final class AppStore {
     func flush() {
         guard persists else { return }
         saveWork?.cancel()
-        let snapshot = state
+        let snapshot = raw
         let name = fileName
         AppStore.saveQueue.async { SharedStore.write(snapshot, to: name) }
     }
 
-    /// Back to the seeded fixture, like the mockup's reset. Your name, handle and
-    /// profile photo stay, and so do your widget and location settings.
+    /// Back to the seeded fixture and signed out, so the next sign in starts with
+    /// onboarding again. Your name, handle and profile photo stay, and so do your
+    /// widget and location settings. Callers also sign out of Convex, which saves
+    /// this cleared state there so signing back in does not bring the old one back.
     func reset() {
         let keep = state
         state = seed.initialState
-        state.session.signedIn = true
-        state.session.onboarded = true
+        state.session.signedIn = false
+        state.session.onboarded = false
         state.session.email = keep.session.email
         state.user.name = keep.user.name
         state.user.handle = keep.user.handle

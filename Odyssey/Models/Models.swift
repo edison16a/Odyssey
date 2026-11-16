@@ -32,8 +32,15 @@ nonisolated struct Place: Codable, Identifiable, Hashable, Sendable {
     var curated: String?
     var website: String?
     var source: String?
+    /// Every photo of the place, first one first. Optional so older data still decodes.
+    var photos: [String]?
 
     var isOSM: Bool { source == "osm" }
+    /// The photos to page through: `photos` when there are any, otherwise the single `photo`.
+    var gallery: [String] {
+        if let photos, !photos.isEmpty { return photos }
+        return photo.isEmpty ? [] : [photo]
+    }
     var areaID: String { area ?? "berkeley" }
 }
 

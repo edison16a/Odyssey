@@ -26,8 +26,9 @@ final class LocationService: NSObject {
     /// Walked points waiting to be saved as footprints, and when they last were.
     @ObservationIgnored var pendingSteps: [Coord] = []
     @ObservationIgnored var lastStepFlush = Date()
+    @ObservationIgnored private var lastFixAt: Date?
     @ObservationIgnored private var lastNamed: Coord?
-    @ObservationIgnored private var waiters: [CheckedContinuation<Coord?, Never>] = []
+    @ObservationIgnored private var waiters: [UUID: CheckedContinuation<Coord?, Never>] = [:]
 
     override init() {
         super.init()
@@ -61,20 +62,21 @@ final class LocationService: NSObject {
 
     /// One fresh fix, waiting up to a few seconds. Nil when permission is off or it times out.
     func currentLocation() async -> Coord? {
-        if let coordinate, isAuthorized { return coordinate }
+        if let coordinate, isAuthorized, let lastFixAt, Date().timeIntervalSince(lastFixAt) < 30 { return coordinate }
         request()
         if isDenied { return nil }
         return await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-            manager.requestLocation()
+            let requestID = UUID()
+            waiters[requestID] = continuation
+            if isAuthorized { manager.requestLocation() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in
-                self?.finishWaiters(with: self?.coordinate)
+                self?.waiters.removeValue(forKey: requestID)?.resume(returning: nil)
             }
         }
     }
 
     private func finishWaiters(with value: Coord?) {
-        let pending = waiters
+        let pending = Array(waiters.values)
         waiters.removeAll()
         pending.forEach { $0.resume(returning: value) }
     }
@@ -92,8 +94,10 @@ final class LocationService: NSObject {
     }
 
     private func handle(_ location: CLLocation) {
+        guard location.horizontalAccuracy >= 0, abs(location.timestamp.timeIntervalSinceNow) < 60 else { return }
         let coord = Coord(location.coordinate)
         coordinate = coord
+        lastFixAt = location.timestamp
         // Small jitters do not change anything on screen, so they do not redraw the app.
         if let old = store?.deviceLocation, old.distance(to: coord) < 25 {
             finishWaiters(with: coord)
@@ -140,7 +144,7 @@ extension LocationService: CLLocationManagerDelegate {
         let message = error.localizedDescription
         Task { @MainActor in
             self.lastError = message
-            self.finishWaiters(with: self.coordinate)
+            self.finishWaiters(with: nil)
         }
     }
 }

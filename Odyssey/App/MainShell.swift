@@ -65,7 +65,7 @@ struct MainShell: View {
     @ViewBuilder private func root(for tab: AppTab) -> some View {
         switch tab {
         case .home: HomeTab()
-        case .friends: FriendsTab()
+        case .worldMap: WorldMapView()
         case .explore: ExploreTab()
         case .profile: ProfileTab()
         }
@@ -79,10 +79,10 @@ struct TabBar: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             tab(.home)
-            tab(.friends)
+            tab(.worldMap)
             Button {
                 Haptics.tap()
-                router.present(.scan(placeID: nil))
+                router.present(.checkIn(placeID: nil))
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .semibold))
@@ -94,7 +94,7 @@ struct TabBar: View {
             .buttonStyle(PressStyle(scale: 0.92))
             .frame(maxWidth: .infinity)
             .offset(y: -2)
-            .accessibilityLabel("Scan a place in 3D")
+            .accessibilityLabel("Check in and earn coins")
             tab(.explore).guideSpot(.exploreTab)
             tab(.profile)
         }

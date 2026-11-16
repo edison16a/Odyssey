@@ -4,7 +4,9 @@
 //
 //  Explore: a full screen, swipe-up feed of real places around you, ranked
 //  by what you love. Swipe up to pass, double tap or tap the heart to save,
-//  and your taste gem in the corner reacts to every save. Chips along the
+//  and your explorer type in the corner reacts to every save. The grid
+//  button switches to list mode: Places you'll love and Hidden gems, all at
+//  once, to scroll and like. Chips along the
 //  top filter for the practical things (wifi, a bathroom, outlets...), and
 //  search and categories sit behind the magnifying glass. Every save teaches
 //  the same taste model the rest of the app uses.
@@ -29,6 +31,11 @@ struct ExploreTab: View {
     /// Bumped each time you land on another place, for the first-time hints.
     @State private var moves = 0
     @State private var coach = ExploreCoachMarks.Phase.swipe
+    /// Where the top bar ends, so the card's photo bars sit under it.
+    @State private var chromeBottom: CGFloat = 0
+    /// "feed" is one place a screen; "list" is everything at once in a grid.
+    @AppStorage("exploreLayout") private var layout = "feed"
+    @AppStorage("exploreListTab") private var listTab: ExploreListTab = .loved
 
     private static let tipKey = "explore-feed"
     /// The tab bar's height above the bottom safe area.
@@ -45,6 +52,7 @@ struct ExploreTab: View {
                             .frame(height: topInset + 100)
                             .allowsHitTesting(false)
                         topBar.padding(.top, topInset + Space.s2)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chromeBottom = $0 }
                     }
                 }
                 .ignoresSafeArea(edges: .top)
@@ -72,10 +80,12 @@ struct ExploreTab: View {
         .onChange(of: store.state.discoverCategory) { syncCategory() }
         .onChange(of: currentID) { old, new in
             if old != nil, new != nil { moves += 1 }
+            warmPhotos()
             keepFed()
         }
         .onChange(of: feed.cards.count) {
             if currentID == nil || !visible.contains(where: { $0.id == currentID }) { currentID = visible.first?.id }
+            warmPhotos()
             keepFed()
         }
         .onChange(of: amenities) {
@@ -115,7 +125,10 @@ struct ExploreTab: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         let list = visible
-        if list.isEmpty {
+        if layout == "list" {
+            ExploreListView(places: list, tab: $listTab, loading: feed.loading || feeding,
+                            topInset: chromeBottom, onToggleLike: toggleLike, onNeedMore: loadMore)
+        } else if list.isEmpty {
             if feed.loading || (!feed.exhausted && amenities.isEmpty) {
                 loadingPage
             } else {
@@ -130,7 +143,8 @@ struct ExploreTab: View {
                                         onToggleLike: { toggleLike(place) },
                                         onNotForMe: { notForMe(place) },
                                         onDirections: { go(place) },
-                                        onDetails: { router.push(.place(place.id)) })
+                                        onDetails: { router.push(.place(place.id)) },
+                                        topInset: chromeBottom)
                             .frame(width: size.width, height: size.height)
                             .id(place.id)
                     }
@@ -205,6 +219,13 @@ struct ExploreTab: View {
         return items.dropLast().joined(separator: ", ") + " and " + items.last!
     }
 
+    /// Decode the next few cards' photos ahead of the swipe, so each page slides in smoothly.
+    private func warmPhotos() {
+        let list = visible
+        let at = list.firstIndex { $0.id == currentID } ?? 0
+        PhotoCache.warm(list[at...].prefix(4).map(\.photo))
+    }
+
     /// Keep places coming: when you near the end of what passes the filters,
     /// let the feed deal more (loading further out if it needs to).
     private func keepFed() {
@@ -226,6 +247,24 @@ struct ExploreTab: View {
                 if now.count - at > 3 { break }
             }
             if let id = currentID, let i = feed.cards.firstIndex(where: { $0.id == id }) { feed.index = i }
+            feeding = false
+        }
+    }
+
+    /// List mode: load further out whenever the grid nears its end.
+    private func loadMore() {
+        guard !feeding, !feed.loading, !feed.exhausted else { return }
+        feeding = true
+        Task {
+            let wanted = visible.count + 12
+            for _ in 0..<6 {
+                let before = feed.cards.count
+                feed.index = feed.cards.count
+                await feed.topUp(store: store)
+                if feed.cards.count == before || feed.exhausted { break }
+                let gems = visible.filter { store.status(of: $0).status == .new }.count
+                if visible.count >= wanted && (listTab == .loved || gems >= 8) { break }
+            }
             feeding = false
         }
     }
@@ -295,6 +334,19 @@ struct ExploreTab: View {
                 }
                 .buttonStyle(PressStyle(scale: 0.95))
                 .accessibilityLabel("Explore location")
+                Button {
+                    Haptics.tap()
+                    withAnimation(.easeInOut(duration: 0.25)) { layout = layout == "list" ? "feed" : "list" }
+                } label: {
+                    Image(systemName: layout == "list" ? "rectangle.portrait" : "square.grid.2x2")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: ExploreChrome.height, height: ExploreChrome.height)
+                        .background(ExploreChrome.fill, in: Circle())
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(PressStyle(scale: 0.92))
+                .accessibilityLabel(layout == "list" ? "Show one at a time" : "Show all as a list")
                 Button { Haptics.tap(); showSearch = true } label: {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 14, weight: .semibold))

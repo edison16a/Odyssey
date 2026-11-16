@@ -59,10 +59,7 @@ struct ProfileBannerView: View {
             }
         }
         .clipped()
-        .onAppear {
-            guard animated else { return }
-            withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) { drift = true }
-        }
+        .loops($drift, .easeInOut(duration: 26), enabled: animated)
     }
 }
 

@@ -4,10 +4,10 @@
 //
 //  Home answers one question within seconds of opening the app: what
 //  adventure can I do today, and what will I earn? Top to bottom: your
-//  coins, streak and rank; Today's Adventure with one big Start button;
-//  Today's Quests, which pay automatically as you complete them;
-//  recommendations; and your explored map, lower down where it supports
-//  exploring instead of leading it.
+//  coins, streak and rank; Today's Adventure, sealed until you reveal it;
+//  Today's Quests, which pay automatically as you complete them; your
+//  World Map; then one card into Explore's list of places you'll love
+//  and hidden gems.
 //
 
 import Foundation
@@ -41,15 +41,13 @@ struct HomeTab: View {
                         .id("hero")
                         .padding(.horizontal, 20)
                         .padding(.top, 18)
-                    HomeExploredMapCard(onPick: { preview = $0 }, onBounty: { bountyOpen = $0 })
+                    HomeExploredMapCard()
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
-                    HomeRecommendations(onPick: { preview = $0 }, part: .loved)
                     HomeTodayQuests(justPaid: paid)
                         .padding(.horizontal, 20)
                         .padding(.top, 28)
-                    HomeRecommendations(onPick: { preview = $0 }, part: .more)
-                    HomeDealsShelf()
+                    HomeRecommendations(onPick: { preview = $0 })
                     TabBarSpacer()
                 }
             }
@@ -65,10 +63,7 @@ struct HomeTab: View {
             }
         }
         .background(Palette.surface)
-        .onAppear {
-            if !store.dailyRevealed { store.revealDaily() }
-            payTasks()
-        }
+        .onAppear { payTasks() }
         // Completing a task anywhere in the app pays it the next time Home sees it.
         .onChange(of: store.state.checkins) { payTasks() }
         .onChange(of: store.state.videos) { payTasks() }
@@ -119,15 +114,15 @@ struct HomeRewardsHeader: View {
         let rank = store.rank()
         VStack(alignment: .leading, spacing: 14) {
             HStack {
+                IconButton(icon: "users", kind: .white, label: "Friends") { router.push(.friends) }
+                    .guideSpot(.friends)
+                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") { router.push(.notifications) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(greeting).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
                     Text(store.state.user.name.split(separator: " ").first.map(String.init) ?? "Explorer")
                         .font(.system(size: 26, weight: .heavy)).tracking(-0.6).foregroundStyle(Palette.ink)
                 }
                 Spacer()
-                IconButton(icon: "bell", kind: .white, badge: store.unreadNotifications, label: "Notifications") {
-                    router.push(.notifications)
-                }
             }
             HStack(spacing: 8) {
                 pill(action: { router.push(.shop(nil)) }) {
@@ -197,10 +192,27 @@ struct HomeAdventureHero: View {
     @State private var glow = false
 
     var body: some View {
+        if store.dailyRevealed {
+            revealed
+                .transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity))
+        } else {
+            sealed
+                .transition(.opacity)
+        }
+    }
+
+    /// Today's pick stays hidden until you hold it open.
+    private var sealed: some View {
+        HomeHoldReveal(place: store.dailyPick().place) {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { store.revealDaily() }
+        }
+    }
+
+    private var revealed: some View {
         let pick = store.dailyPick()
         let done = store.checkedInTodayIDs.contains(pick.place.id)
-        let reward = Rewards.checkIn.coins + (pick.rare ? Rewards.first.coins : 0) + 150
-        VStack(spacing: 0) {
+        let rewards = store.checkInRewards(for: pick.place)
+        return VStack(spacing: 0) {
             Button { router.push(.place(pick.place.id)) } label: {
                 ZStack(alignment: .bottomLeading) {
                     PlacePhoto(place: pick.place)
@@ -234,9 +246,9 @@ struct HomeAdventureHero: View {
                     } else {
                         Text("You'll earn").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.muted)
                         CoinIcon(size: 18)
-                        Text("+\(reward) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
+                        Text("+\(rewards.coins) coins").font(.system(size: 17, weight: .heavy)).monospacedDigit()
                         Spacer()
-                        Text("+\(Rewards.checkIn.xp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
+                        Text("+\(rewards.totalXp) XP").font(.system(size: 13, weight: .heavy)).foregroundStyle(Palette.rare)
                     }
                 }
                 .foregroundStyle(Palette.ink)
@@ -265,9 +277,7 @@ struct HomeAdventureHero: View {
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { glow = true }
-        }
+        .loops($glow, .easeInOut(duration: 1.4))
     }
 }
 
@@ -360,58 +370,35 @@ struct HomeTodayQuests: View {
 struct HomeRecommendations: View {
     @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
+    @AppStorage("exploreLayout") private var layout = "feed"
+    @AppStorage("exploreListTab") private var listTab: ExploreListTab = .loved
     var onPick: (Place) -> Void
-    /// The "places you'll love" shelf sits high on Home; the rest come after the quests.
-    enum Part { case loved, more }
-    var part: Part = .more
 
+    /// Places you'll love and hidden gems live in Explore now; this opens them.
     var body: some View {
-        let open = store.nearbyPlaces.filter { store.status(of: $0).status != .mine }
-        let near = Array(open.sorted { store.metres(to: $0) < store.metres(to: $1) }.prefix(8))
-        let gems = Array(open.filter { store.status(of: $0).status == .new }.prefix(8))
-        let forYou = Array(store.forYou().filter { store.status(of: $0).status != .mine }.prefix(8))
-        let friends = Array(store.friendAdventures.prefix(8))
-        VStack(alignment: .leading, spacing: 0) {
-            if part == .loved {
-                shelf("Places You'll Love", link: "Discover", places: forYou)
-            } else {
-            shelf("Adventures Near You", link: "See all", places: near)
-            shelf("Hidden Gems", link: "Be first · +\(Rewards.first.coins)", places: gems, star: true)
-            }
-            if part == .more, !friends.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    SectionHeader(title: "Adventures Your Friends Completed", link: "Friends") { router.select(.friends) }
-                        .padding(.horizontal, 20)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(friends, id: \.place.id) { item in
-                                HomeFriendAdventureCard(place: item.place, person: item.by) { onPick(item.place) }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
+        let gem = TasteGem.of(store)
+        Button {
+            Haptics.tap()
+            layout = "list"
+            listTab = .loved
+            router.select(.explore)
+        } label: {
+            HStack(spacing: 12) {
+                TasteGemView(gem: gem, size: 40, animated: false)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Places you'll love").font(.system(size: 17, weight: .heavy)).foregroundStyle(Palette.ink)
+                    Text("Picked for you, a \(gem.persona), plus hidden gems").font(.system(size: 13)).foregroundStyle(Palette.muted)
                 }
-                .padding(.top, 28)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.muted)
             }
+            .padding(14)
+            .background(.white, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
         }
-    }
-
-    @ViewBuilder private func shelf(_ title: String, link: String, places: [Place], star: Bool = false) -> some View {
-        if !places.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                SectionHeader(title: title, link: link) { router.select(.explore) }
-                    .padding(.horizontal, 20)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(places) { place in
-                            HomeRecCard(place: place, star: star) { onPick(place) }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-            }
-            .padding(.top, 28)
-        }
+        .buttonStyle(PressStyle(scale: 0.98))
+        .padding(.horizontal, 20)
+        .padding(.top, 28)
     }
 }
 
@@ -488,57 +475,24 @@ struct HomeRecCard: View {
 // MARK: The 3D explored map
 
 struct HomeExploredMapCard: View {
-    @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
-    @Environment(ToastCenter.self) private var toast
-    var onPick: (Place) -> Void
-    var onBounty: (Bounty) -> Void
-    @State private var position: MapCameraPosition = .automatic
-    @State private var zoom = 14
-    @State private var centered = false
-    /// Amenity kinds switched on over the map.
-    @State private var amenities: Set<String> = []
-    @State private var amenityOpen: AmenityPoint?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "World Map", link: "Open map") { router.present(.exploredMap(focus: nil)) }
-            ZStack(alignment: .bottomLeading) {
-                HomeMapView(position: $position, zoom: $zoom, filter: "all", onPick: onPick, onBounty: onBounty,
-                            amenities: amenities, onAmenity: { point in
-                                Haptics.tap()
-                                amenityOpen = point
-                            })
-                VStack(alignment: .leading, spacing: 8) {
-                    HomeAmenityChips(kinds: $amenities)
-                        .padding(.top, 10)
-                    Spacer()
-                    HStack {
-                        HomeFootprintChip()
-                        Spacer()
-                        HomeMapLegend()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Your World in 3D")
+            WorldMapView(isPreview: true)
+                .frame(height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+                .overlay(RoundedRectangle(cornerRadius: Radius.lg).strokeBorder(Palette.line))
+            Button { router.openWorldMap() } label: {
+                Label("Open Map", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .foregroundStyle(.white)
+                    .background(Palette.accent, in: RoundedRectangle(cornerRadius: 16))
             }
-            .frame(height: 440)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Palette.line))
-        }
-        .onAppear {
-            guard !centered else { return }
-            centered = true
-            let center = store.demoFocus ?? (store.usingRealLocation ? store.here : store.home.center)
-            // Tilted so the explored buildings stand up in 3D.
-            position = .camera(MapCamera(centerCoordinate: center.location, distance: 1500, heading: 20, pitch: 62))
-        }
-        .sheet(item: $amenityOpen) { point in
-            AmenitySheet(point: point)
-                .presentationDetents([.height(330)])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(28)
+            .buttonStyle(PressStyle())
+            .accessibilityIdentifier("home.openWorldMap")
         }
     }
-
 }

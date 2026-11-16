@@ -155,7 +155,7 @@ struct DemoGuideRunner {
         case "bounty": return here("b-dogpatch", "b-telegraph")
         case "business": push(.profile, .business)
         case "post-bounty": present(.profile, .bountyWizard)
-        case "friends": inApp(.friends)
+        case "friends": inApp(.home); router.push(.friends)
         case "profile": inApp(.profile)
         case "shop": push(.profile, .shop(nil))
         case "globe": present(.profile, .globe)

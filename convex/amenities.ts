@@ -124,7 +124,7 @@ export const demo = query({
       for (const p of places) if (p.features?.length) features[p.placeId] = p.features;
     }
     const points = (await ctx.db.query("amenities").collect()).map((a) => ({
-      id: a._id, kind: a.kind, name: a.name, lat: a.lat, lng: a.lng, note: a.note, access: a.access, placeId: a.placeId ?? null,
+      verified: a.verified ?? false, id: a._id, kind: a.kind, name: a.name, lat: a.lat, lng: a.lng, note: a.note, access: a.access, placeId: a.placeId ?? null,
     }));
     return { features, points };
   },

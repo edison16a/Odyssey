@@ -114,7 +114,9 @@ struct StreakPowerParticles: View {
     }
 }
 
-/// Step two of a milestone: your profile wearing the new frame and banner, with the badge.
+/// Step two of a milestone: everything it unlocked on one screen. Your profile
+/// wearing the new Globie frame on the new streak banner, then the frame and the
+/// banner side by side, and one button that equips both.
 struct StreakPowerUnlock: View {
     @Environment(AppStore.self) private var store
     @Environment(ToastCenter.self) private var toast
@@ -123,19 +125,42 @@ struct StreakPowerUnlock: View {
     var onFinish: () -> Void
     @State private var shown = false
 
+    private var banner: Banner? { store.seed.banner("streak-\(tier.id)") }
+
     var body: some View {
         ZStack {
             tier.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                Spacer()
-                look
-                Text("Unlocked").font(.system(size: 22, weight: .bold)).tracking(-0.4).padding(.top, 22)
-                Spacer()
+                Spacer(minLength: 12)
+                Text("\(tier.days) DAY STREAK").font(.system(size: 12, weight: .heavy)).tracking(1.4)
+                    .foregroundStyle(tier.color)
+                Text(banner == nil ? "You unlocked a new look" : "You unlocked 2 rewards")
+                    .font(.system(size: 26, weight: .bold)).tracking(-0.6)
+                    .padding(.top, 6)
+                look.padding(.top, 20)
+                HStack(spacing: 12) {
+                    reward(title: "Profile frame") {
+                        AvatarView(person: store.me, size: 64, frame: "globie-\(tier.id)")
+                            .frame(height: 84)
+                    }
+                    if let banner {
+                        reward(title: "Profile banner") {
+                            PhotoView(path: banner.photo)
+                                .frame(height: 84)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+                .frame(maxWidth: 300)
+                .padding(.top, 16)
+                .opacity(shown ? 1 : 0)
+                .offset(y: shown ? 0 : 16)
+                Spacer(minLength: 12)
                 VStack(spacing: 8) {
                     if canEquip {
-                        Button("Equip") {
+                        Button(banner == nil ? "Equip" : "Equip both") {
                             store.equipTier(tier)
-                            toast.show("Equipped", icon: "check")
+                            toast.show(banner == nil ? "Frame equipped" : "Frame and banner equipped", icon: "check")
                             onFinish()
                         }
                         .buttonStyle(.pill(.light, fill: true))
@@ -150,14 +175,30 @@ struct StreakPowerUnlock: View {
         }
         .foregroundStyle(.white)
         .onAppear {
+            Haptics.success()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) { shown = true }
         }
     }
 
+    /// One unlocked item: its preview over a small label.
+    private func reward<Preview: View>(title: String, @ViewBuilder preview: () -> Preview) -> some View {
+        VStack(spacing: 8) {
+            preview()
+            VStack(spacing: 1) {
+                Text(tier.name).font(.system(size: 13, weight: .bold)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white.opacity(0.65))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    /// Your profile header as it will look: the banner with you in the new frame on it.
     private var look: some View {
         VStack(spacing: 0) {
             Group {
-                if let banner = store.seed.banner("streak-\(tier.id)") {
+                if let banner {
                     PhotoView(path: banner.photo)
                 } else {
                     tier.color.opacity(0.4)
@@ -165,7 +206,12 @@ struct StreakPowerUnlock: View {
             }
             .frame(height: 120)
             .clipped()
-            Color.clear.frame(height: 54)
+            VStack(spacing: 1) {
+                Text(store.me.name).font(.system(size: 15, weight: .bold))
+                Text("@\(store.me.handle)").font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.6))
+            }
+            .frame(height: 92, alignment: .bottom)
+            .padding(.bottom, 10)
         }
         .frame(maxWidth: 300)
         .background(.white.opacity(0.08))

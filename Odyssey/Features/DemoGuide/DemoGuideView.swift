@@ -46,7 +46,7 @@ struct DemoGuideView: View {
                     }
                     Button {
                         store.reset()
-                        store.update { s in s.session.signedIn = false; s.session.onboarded = false }
+                        Task { await Cloud.shared.signOut() }
                         router.paths = [:]
                         router.tab = .home
                         toast.show("Demo reset", icon: "refresh")

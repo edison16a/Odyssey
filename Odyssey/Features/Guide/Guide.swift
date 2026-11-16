@@ -14,7 +14,7 @@ import SwiftUI
 
 /// A control a spotlight can land on.
 enum GuideSpot: String, Hashable {
-    case hero, start, stats, exploreTab, addFriend
+    case hero, start, stats, exploreTab, friends
 }
 
 /// One spotlight: where it lands, what Globie says and how it moves on.
@@ -140,9 +140,9 @@ extension Guide {
                          button: "Got it", directionsTo: place.id)])
     }
 
-    /// The + on the Friends tab.
+    /// The Friends button at the top of Home.
     func startFriend() {
-        start([GuideStep(spot: .addFriend, tab: .friends, title: "Bring a friend",
-                         text: "Tap + to add someone. Check in together and you both earn 2x coins.", advance: .tapSpot)])
+        start([GuideStep(spot: .friends, tab: .home, title: "Bring a friend",
+                         text: "Your friends live here. Add one, check in together and you both earn 2x coins.", advance: .tapSpot)])
     }
 }

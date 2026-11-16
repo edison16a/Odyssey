@@ -48,10 +48,10 @@ nonisolated struct AppState: Codable, Sendable {
     }
 
     nonisolated struct Equipped: Codable, Sendable {
-        var frame = "accent"
-        var banner = "city-san-francisco"
-        var effect = "none"
-        var title = "wanderer"
+        var frame = "dual"
+        var banner = "streak-spark"
+        var effect = "vines"
+        var title = "trailblazer"
         var explorer = "ibn-battuta"
         var badges: [String] = ["first-explorer", "scholar", "streak-7"]
     }
@@ -90,14 +90,15 @@ nonisolated struct AppState: Codable, Sendable {
         var gps: Bool?
     }
 
-    var version = 6
+    var version = 8
     var session = Session()
     var interests: [String: Bool] = ["startups": true, "coffee": true, "culture": true]
     var user = User()
     var wallet = Wallet()
     var streak = Streak()
     var stats = Stats()
-    var owned: [String] = []
+    /// The default look (Dual Element, Sparkler Globie, Ivy Vines, Trailblazer) is owned from the start.
+    var owned: [String] = ["frame-dual", "banner-streak-spark", "effect-vines", "title-trailblazer"]
     var equipped = Equipped()
     var earnedBadges: [String] = []
     var boosts: [String: Int] = ["xp2": 0, "streak-freeze": 1]
@@ -122,6 +123,9 @@ nonisolated struct AppState: Codable, Sendable {
     var tipsSeen: [String] = []
     var myPosts: [Post] = []
     var friends: [String] = []
+    /// Real Odyssey users added from your contacts, keyed by their user id,
+    /// so they show in your friends list like the seeded explorers do.
+    var cloudPeople: [String: Person] = [:]
     var requests: [String] = []
     var storiesSeen: [String: Bool] = [:]
     var likes: [String: Bool] = [:]
@@ -178,7 +182,7 @@ nonisolated struct AppState: Codable, Sendable {
     nonisolated enum CodingKeys: String, CodingKey {
         case version, session, interests, user, wallet, streak, stats, owned, equipped, earnedBadges, boosts, demoArea,
              checkins, videos, firsts, taste, placeInsights, discoverLocation, discoverCategory, savedPlaces, questInvites,
-             questsDone, myPosts, friends, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
+             questsDone, myPosts, friends, cloudPeople, requests, storiesSeen, likes, readNotifications, visited, giftCards, dailyReveal, dailyPickFor, widgetPrefs,
              useDeviceLocation, myBounties, bountyProgress, seasonDone, travelTrails, travelCountries, travelStates,
              footprints, trackInBackground, starred, recommended, demoMode, dailyTasks, claimedDeals, connectedSources, tipsSeen
     }
@@ -190,6 +194,7 @@ nonisolated struct AppState: Codable, Sendable {
             (try? c.decodeIfPresent(T.self, forKey: key)) ?? fallback
         }
         version = value(.version, d.version)
+        let savedVersion = version
         session = value(.session, d.session)
         interests = value(.interests, d.interests)
         // Version 6 swapped the books and travel questions for startups and cafes.
@@ -222,6 +227,7 @@ nonisolated struct AppState: Codable, Sendable {
         tipsSeen = value(.tipsSeen, d.tipsSeen)
         myPosts = value(.myPosts, d.myPosts)
         friends = value(.friends, d.friends)
+        cloudPeople = value(.cloudPeople, d.cloudPeople)
         requests = value(.requests, d.requests)
         storiesSeen = value(.storiesSeen, d.storiesSeen)
         likes = value(.likes, d.likes)
@@ -243,6 +249,35 @@ nonisolated struct AppState: Codable, Sendable {
         starred = value(.starred, d.starred)
         recommended = value(.recommended, d.recommended)
         demoMode = value(.demoMode, d.demoMode)
+        if savedVersion < 7 { applyEdisonDemo() }
+        // Version 8: the new default look, owned and worn.
+        if savedVersion < 8 {
+            equipped.frame = d.equipped.frame
+            equipped.banner = d.equipped.banner
+            equipped.effect = d.equipped.effect
+            equipped.title = d.equipped.title
+            for id in d.owned where !owned.contains(id) { owned.append(id) }
+        }
+        version = d.version
+    }
+
+    /// Version 7: Edison's demo profile. Demo mode on, 15 XP short of Voyager,
+    /// 11th in San Francisco so the Y Combinator check-in lifts him into the top 10,
+    /// a 99 day streak, 7,281 coins and his own photo.
+    private mutating func applyEdisonDemo() {
+        demoMode = true
+        demoArea = "sf"
+        wallet.coins = 7281
+        wallet.xp = 885
+        wallet.points = 492
+        streak.days = 99
+        streak.best = max(streak.best, 99)
+        if user.avatar.kind == "none" { user.avatar = Avatar(kind: "photo", value: "assets/media/people/edison.jpg") }
+        visited.removeAll { $0 == "yc" }
+        firsts.removeAll { $0 == "yc" }
+        checkins["yc"] = nil
+        questsDone["q-yc"] = nil
+        earnedBadges.removeAll { $0 == "top-10" || $0 == "top-100" }
     }
 }
 

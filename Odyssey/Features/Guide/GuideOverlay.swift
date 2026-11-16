@@ -58,7 +58,7 @@ struct GuideOverlay: View {
         guard let step = guide.step, step.advance == .tapSpot else { return }
         switch step.spot {
         case .exploreTab: if router.tab == .explore { guide.next() }
-        case .addFriend: if !router.path(.friends).isEmpty { guide.next() }
+        case .friends: if !router.path(.home).isEmpty { guide.next() }
         default: break
         }
     }
@@ -69,7 +69,7 @@ struct GuideOverlay: View {
         case .stats: return 8
         case .start: return 8
         case .exploreTab: return 2
-        case .addFriend: return 8
+        case .friends: return 8
         }
     }
 

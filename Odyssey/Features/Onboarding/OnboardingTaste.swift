@@ -159,7 +159,7 @@ struct OnboardingConnectStep: View {
                 Text("Make Odyssey yours")
                     .font(.system(size: 26, weight: .bold)).tracking(-0.6)
                     .foregroundStyle(Palette.ink)
-                Text("Connect what you already use. We read it once to cut your taste gem.")
+                Text("Connect what you already use. We read it once to find your explorer type.")
                     .font(.system(size: 15))
                     .foregroundStyle(Palette.muted)
                     .padding(.top, 6)
@@ -192,7 +192,7 @@ struct OnboardingConnectStep: View {
                 .padding(.top, 14)
 
                 Button { proceed() } label: {
-                    Text(anyConnected ? "Build my taste gem" : "Continue")
+                    Text(anyConnected ? "Find my explorer type" : "Continue")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -439,7 +439,7 @@ struct OnboardingCompileStep: View {
             "Loading \(total)…",
             outdoor,
             "Matching 2,400 places in San Francisco…",
-            "Shaping your gem…",
+            "Finding your explorer type…",
         ]
     }
 
@@ -611,7 +611,7 @@ struct OnboardingRevealStep: View {
         VStack(spacing: 14) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 14) {
-                    Text("YOUR TASTE GEM")
+                    Text("YOUR EXPLORER TYPE")
                         .font(.system(size: 12, weight: .bold))
                         .tracking(2)
                         .foregroundStyle(.white.opacity(0.6))
@@ -629,7 +629,7 @@ struct OnboardingRevealStep: View {
                                 chip(trait, gem.colors[i % gem.colors.count])
                             }
                         }
-                        Text("Your gem is your taste. It decides what Odyssey shows you first.")
+                        Text("Your explorer type decides what Odyssey shows you first. It shifts as you save places and check in.")
                             .font(.system(size: 14))
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)
@@ -659,8 +659,11 @@ struct OnboardingRevealStep: View {
         .padding(.horizontal, 22)
         .padding(.bottom, 24)
         .onAppear {
-            // Pin today's pick now so Home opens on the same adventure.
-            if !store.dailyRevealed { store.revealDaily() }
+            // Pin today's pick so Home reveals the same adventure (Home still keeps it sealed until you tap).
+            if !store.dailyRevealed {
+                let pick = store.dailyPick()
+                store.update { s in s.dailyPickFor = AppState.DailyPick(date: Format.today(), placeId: pick.place.id) }
+            }
             withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) { shown = true }
             withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.45)) { cardShown = true }
         }
@@ -678,7 +681,9 @@ struct OnboardingRevealStep: View {
     }
 
     private func adventure(_ pick: (place: Place, reason: String, rare: Bool)) -> some View {
-        let reward = Rewards.checkIn.coins + (pick.rare ? Rewards.first.coins : 0) + 150
+        // Same numbers the Home card, the recorder and the results screen use.
+        let rewards = store.checkInRewards(for: pick.place)
+        let reward = rewards.coins
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkle").font(.system(size: 11, weight: .bold))
@@ -713,7 +718,7 @@ struct OnboardingRevealStep: View {
                             CoinIcon(size: 14)
                             Text("+\(reward)").monospacedDigit()
                         }
-                        Text("+\(Rewards.checkIn.xp) XP").foregroundStyle(Color(hex: "#c9b6ff"))
+                        Text("+\(rewards.totalXp) XP").foregroundStyle(Color(hex: "#c9b6ff"))
                     }
                     .font(.system(size: 12, weight: .bold))
                 }

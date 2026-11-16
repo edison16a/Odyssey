@@ -12,6 +12,11 @@
 //  while filming, so the camera always takes the height of the nearest
 //  point on that path, and cannot wander far away from it.
 //
+//  Why some views go soft: a scan only looks right from where the explorer
+//  pointed the camera. Looking somewhere they never filmed shows streaks,
+//  so those views are blurred and dimmed, with a note saying which way to
+//  turn. Views that were filmed are drawn exactly as before.
+//
 
 import Foundation
 
@@ -39,6 +44,10 @@ enum ScanViewerPage {
   .mark::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #fff; vertical-align: 1px; }
   .mark.barrier::before { background: #ff5a5f; }
   .mark.helps::before { background: #34c77b; }
+  #note { position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); padding: 12px 18px; border-radius: 18px; text-align: center;
+          background: rgba(11,11,12,.62); color: #fff; font: 600 15px -apple-system, system-ui, sans-serif; white-space: nowrap; pointer-events: none;
+          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; transition: opacity .25s; }
+  #note small { display: block; font-weight: 500; font-size: 13px; opacity: .8; margin-top: 3px; }
   #hint { position: fixed; left: 0; right: 0; bottom: calc(190px + env(safe-area-inset-bottom)); text-align: center; pointer-events: none;
           font: 500 13px -apple-system, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 4px #000; opacity: .9; transition: opacity .6s; }
 </style>
@@ -46,6 +55,7 @@ enum ScanViewerPage {
 <body>
 <canvas id="c"></canvas>
 <div id="hint">Use the stick to walk. Drag anywhere to look around.</div>
+<div id="note"><span id="noteTitle"></span><small id="noteHow"></small></div>
 <div id="stick"><div id="knob"></div></div>
 <div id="tour">Play tour</div>
 <script>
@@ -226,7 +236,7 @@ function placeMarks(right, dn, fwd, focal) {
     let y = s.y;
     for (let tries = 0; tries < 8 && boxes.some(b => Math.abs(b.x - s.x) < (b.w + w) / 2 && Math.abs(b.y - y) < h); tries++) y -= h;
     boxes.push({ x: s.x, y, w });
-    s.m.el.style.opacity = Math.min(1, (8 - s.far) / 3);
+    s.m.el.style.opacity = Math.min(1, (8 - s.far) / 3) * (1 - soft);
     s.m.el.style.transform = `translate(${s.x}px, ${y}px) translate(-50%, -100%)`;
   }
 }
@@ -259,6 +269,54 @@ function nearest(pos) {
   return { point: pts[best], dist: Math.sqrt(Math.max(0, bestD)) };
 }
 
+// ---- only what was filmed ----
+// How close a view is to one the explorer filmed: 1 is filmed, 0 was never seen. A view holds up when a
+// point of the walk right here looked the same way. Points further off only count for less, so a part of
+// the walk that passed nearby facing another way does not vouch for this one. Stepping off the path is
+// fine for a couple of metres, then the whole view fades out as the edge of what was filmed.
+// The distances and angles were set by eye against real scans.
+const ease = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+const away = new Float32Array(pts.length);
+function cover(pos, f) {
+  let near = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i].pos, x = pos[0] - p[0], y = pos[1] - p[1], z = pos[2] - p[2], v = x * up[0] + y * up[1] + z * up[2];
+    away[i] = Math.sqrt(Math.max(0, x * x + y * y + z * z - v * v));
+    if (away[i] < near) near = away[i];
+  }
+  let best = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const close = 1 - ease(0.3, 1.3, away[i] - near);
+    if (close <= best) continue;
+    const same = 1 - ease(0.25, 1.3, Math.acos(Math.max(-1, Math.min(1, dot(f, pts[i].fw)))));
+    if (close * same > best) best = close * same;
+  }
+  return best * (1 - ease(1.5, 3.0, near));
+}
+const flatAt = yaw => [0, 1, 2].map(i => Math.cos(yaw) * f0[i] + Math.sin(yaw) * r0[i]);
+const noteEl = document.getElementById('note'), noteTitle = document.getElementById('noteTitle'), noteHow = document.getElementById('noteHow');
+let soft = 0, softShown = -1;
+/// Blur and dim the picture by how little of this view was filmed, and say which way to turn.
+function soften(f) {
+  soft = 1 - ease(0.25, 0.75, cover(cam.pos, f));
+  const k = Math.round(soft * 40) / 40;
+  if (k !== softShown) {
+    softShown = k;
+    canvas.style.filter = k ? `blur(${(20 * k).toFixed(1)}px) brightness(${(1 - 0.42 * k).toFixed(2)}) saturate(${(1 - 0.35 * k).toFixed(2)})` : '';
+    canvas.style.transform = k ? `scale(${(1 + 0.12 * k).toFixed(3)})` : '';   // keeps the blurred edges off the screen
+  }
+  if (soft < 0.6) { noteEl.style.opacity = 0; return; }
+  // The nearest direction that was filmed from here, if there is one.
+  let turn = 0;
+  for (let a = 0.1; a <= Math.PI && !turn; a += 0.1) {
+    if (cover(cam.pos, flatAt(cam.yaw - a)) > 0.8) turn = -1;
+    else if (cover(cam.pos, flatAt(cam.yaw + a)) > 0.8) turn = 1;
+  }
+  noteTitle.textContent = turn ? 'This side was not filmed' : 'This spot was not filmed';
+  noteHow.textContent = turn < 0 ? '‹ Turn left to keep exploring' : turn > 0 ? 'Turn right › to keep exploring' : 'Walk back to keep exploring';
+  noteEl.style.opacity = 1;
+}
+
 // ---- depth sort, nearest first ----
 const depths = new Float32Array(N), keys = new Uint16Array(N), counts = new Uint32Array(65536);
 let sortedFwd = [0, 0, 0], sortedPos = [1e9, 0, 0];
@@ -287,7 +345,7 @@ function resize() {
   if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) { canvas.width = w; canvas.height = h; dirty = true; }
 }
 function draw() {
-  const { right, fwd, dn } = basis();
+  const { f, right, fwd, dn } = basis();
   const p = cam.pos, w = canvas.width, h = canvas.height;
   const focal = Math.min(w, h) / 2 / Math.tan(33 * Math.PI / 180);
   const znear = 0.1, zfar = 300;
@@ -297,6 +355,7 @@ function draw() {
   gl.uniform2f(uFocal, focal, focal);
   gl.uniform2f(uViewport, w, h);
   sortSplats(fwd, p);
+  soften(f);
   placeMarks(right, dn, fwd, focal);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);

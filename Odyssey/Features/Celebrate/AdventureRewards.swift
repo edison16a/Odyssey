@@ -29,6 +29,8 @@ struct AdventureRewards: View {
         var valueColor: Color = Palette.ink
         /// Shown as is instead of counting up, for cash.
         var text: String? = nil
+        /// The total line.
+        var bold = false
     }
 
     var body: some View {
@@ -40,7 +42,7 @@ struct AdventureRewards: View {
                     glyph(row.glyph)
                         .frame(width: 32, height: 32)
                         .background(isStreak(row) ? Color(hex: "#eef3ff") : .white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    Text(row.label).font(.system(size: 15)).foregroundStyle(Palette.ink)
+                    Text(row.label).font(.system(size: 15, weight: row.bold ? .bold : .regular)).foregroundStyle(Palette.ink)
                     Spacer(minLength: 8)
                     Group {
                         if let text = row.text {
@@ -64,20 +66,13 @@ struct AdventureRewards: View {
     private func isStreak(_ row: Row) -> Bool { row.id == "streak" }
 
     private func makeRows() -> [Row] {
-        var rows: [Row] = [Row(id: "checkin", glyph: .coin, label: "Check-in reward", value: Rewards.checkIn.coins, prefix: "+", suffix: " coins")]
-        if result.first {
-            rows.append(Row(id: "first", glyph: .icon("star.fill", Palette.rare), label: "First explorer bonus",
-                            value: Rewards.first.coins, prefix: "+", suffix: " coins", valueColor: Palette.rare))
+        // Coins, line by line, from the same breakdown the wallet was credited from.
+        var rows: [Row] = result.rewards.lines.map { line in
+            Row(id: line.id, glyph: glyph(for: line.kind), label: line.label, value: line.coins, prefix: "+", suffix: " coins",
+                valueColor: line.kind == .first ? Palette.rare : Palette.ink)
         }
-        if let quest = result.quest {
-            let label = "\(store.questRarity(quest).label) quest, \(quest.multiplier)x"
-            rows.append(Row(id: "quest", glyph: .icon("flag.fill", Palette.gold), label: label,
-                            value: quest.coins * quest.multiplier, prefix: "+", suffix: " coins"))
-        }
-        if result.recommended {
-            rows.append(Row(id: "picked", glyph: .icon("sparkles", Palette.gold), label: "Recommended pick bonus",
-                            value: Rewards.recommended.coins, prefix: "+", suffix: " coins"))
-        }
+        rows.append(Row(id: "total", glyph: .coin, label: "Total coins", value: result.coins, prefix: "+", suffix: " coins",
+                        bold: true))
         rows.append(Row(id: "xp", glyph: .icon("bolt.fill", Palette.accent), label: "Experience", value: result.xp, prefix: "+", suffix: " XP"))
         if let video, !video.already {
             rows.append(Row(id: "video", glyph: .icon("video.fill", Palette.accent), label: "Video bonus", value: video.xp, prefix: "+", suffix: " XP"))
@@ -94,6 +89,16 @@ struct AdventureRewards: View {
         rows.append(Row(id: "streak", glyph: .globie(mood), label: result.streak ? "Streak extended" : "Streak kept",
                         value: days, prefix: "", suffix: " days"))
         return rows
+    }
+
+    private func glyph(for kind: RewardLine.Kind) -> Row.Glyph {
+        switch kind {
+        case .checkIn: .coin
+        case .first: .icon("star.fill", Palette.rare)
+        case .quest, .videoQuest: .icon("flag.fill", Palette.gold)
+        case .recommended: .icon("sparkles", Palette.gold)
+        case .task: .icon("checkmark.circle.fill", Palette.success)
+        }
     }
 
     @ViewBuilder private func glyph(_ glyph: Row.Glyph) -> some View {

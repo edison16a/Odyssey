@@ -57,9 +57,12 @@ struct SettingsView: View {
                     group("Admin") {
                         SettingsRow(icon: "sliders", title: "Admin", value: "Stats, scenes, reset") { router.push(.admin) }
                     }
-                    Text("Odyssey 1.0. \(Brand.motto)")
-                        .font(.system(size: 11)).foregroundStyle(Palette.faint)
-                        .frame(maxWidth: .infinity).padding(.vertical, 30)
+                    VStack(spacing: 4) {
+                        Text(Brand.motto)
+                        Text(versionText).monospacedDigit()
+                    }
+                    .font(.system(size: 11)).foregroundStyle(Palette.faint)
+                    .frame(maxWidth: .infinity).padding(.vertical, 30)
                 }
                 .padding(.horizontal, 20)
             }
@@ -70,8 +73,16 @@ struct SettingsView: View {
             Button("Reset", role: .destructive, action: reset)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your coins, streak, check-ins and cosmetics go back to the starting demo.")
+            Text("Your coins, streak, check-ins and cosmetics go back to the starting demo, and you are signed out.")
         }
+    }
+
+    /// "Version 6.5 (build 1)", read from the app bundle.
+    private var versionText: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "Version \(version) (build \(build))"
     }
 
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -148,8 +159,11 @@ struct SettingsView: View {
     }
 
     private func reset() {
-        store.reset()
         router.popToRoot()
+        router.tab = .home
+        store.reset()
+        // Signing out pushes the cleared state first, so it is what comes back on the next sign in.
+        Task { await Cloud.shared.signOut() }
         toast.show("Fresh start", icon: "refresh")
     }
 
