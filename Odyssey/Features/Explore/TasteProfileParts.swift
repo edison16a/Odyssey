@@ -13,6 +13,10 @@ import SwiftUI
 struct TasteHero: View {
     @Environment(AppStore.self) private var store
     var profile: TasteProfile
+    /// Onboarding shows the banner before there is anything to count.
+    var showStats = true
+    /// Replaces the "Mostly drawn to…" line when set.
+    var line: String? = nil
     @State private var shown = false
 
     var body: some View {
@@ -30,11 +34,13 @@ struct TasteHero: View {
                     Text(profile.persona.name).font(.system(size: 28, weight: .heavy, design: .rounded)).tracking(-0.6)
                 }
             }
-            Text(subline).font(.system(size: 15, weight: .medium)).opacity(0.92)
-            HStack(spacing: 8) {
-                stat("\(profile.thumbs.count)", "thumbs")
-                stat("\(store.state.stats.explored)", "explored")
-                stat(Format.number(store.kmWalked), "km walked")
+            Text(line ?? subline).font(.system(size: 15, weight: .medium)).opacity(0.92)
+            if showStats {
+                HStack(spacing: 8) {
+                    stat("\(profile.thumbs.count)", "thumbs")
+                    stat("\(store.state.stats.explored)", "explored")
+                    stat(Format.number(store.kmWalked), "km walked")
+                }
             }
         }
         .foregroundStyle(.white)

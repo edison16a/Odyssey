@@ -540,7 +540,7 @@ struct OnboardingCompileStep: View {
         let local = p * count - Double(index)
         let alpha = index == lines.count - 1 ? min(1, local * 6) : min(1, local * 6, (1 - local) * 6)
         return VStack(spacing: 12) {
-            Text("Our AI is compiling your taste…")
+            Text("Odyssey is compiling your taste…")
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.5)
             Text(lines[index])
@@ -602,45 +602,57 @@ struct OnboardingCompileStep: View {
 struct OnboardingRevealStep: View {
     @Environment(AppStore.self) private var store
     var done: () -> Void
-    @State private var shown = false
-    @State private var cardShown = false
+    /// 0 nothing, 1 badge lands and shakes, 2 the banner, 3 the first adventure and button.
+    @State private var stage = 0
+    @State private var burst = false
 
     var body: some View {
         let gem = TasteGem.of(store)
         let pick = store.dailyPick()
         VStack(spacing: 14) {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 14) {
+                VStack(spacing: 18) {
                     Text("YOUR EXPLORER TYPE")
                         .font(.system(size: 12, weight: .bold))
                         .tracking(2)
                         .foregroundStyle(.white.opacity(0.6))
                         .padding(.top, 12)
-                    TasteGemView(gem: gem, size: 210, animated: true)
-                        .scaleEffect(shown ? 1 : 0.7)
-                        .opacity(shown ? 1 : 0)
-                    VStack(spacing: 10) {
-                        Text("You're \(article(gem.persona)) \(gem.persona)")
-                            .font(.system(size: 28, weight: .bold))
-                            .tracking(-0.8)
-                            .multilineTextAlignment(.center)
+                        .opacity(stage >= 1 ? 1 : 0)
+                    ZStack {
+                        Circle()
+                            .strokeBorder(gem.colors[0].opacity(burst ? 0 : 0.9), lineWidth: burst ? 1 : 10)
+                            .frame(width: 170, height: 170)
+                            .scaleEffect(burst ? 2.4 : 0.5)
+                        TasteGemView(gem: gem, size: stage >= 2 ? 120 : 170, animated: false)
+                            .scaleEffect(stage >= 1 ? 1 : 0.2)
+                            .opacity(stage >= 1 ? 1 : 0)
+                            .keyframeAnimator(initialValue: 0.0, trigger: stage >= 1) { content, angle in
+                                content.rotationEffect(.degrees(angle))
+                            } keyframes: { _ in
+                                KeyframeTrack {
+                                    LinearKeyframe(0, duration: 0.25)
+                                    for a in [-11.0, 10, -8, 7, -5, 3, 0] {
+                                        CubicKeyframe(a, duration: 0.07)
+                                    }
+                                }
+                            }
+                    }
+                    .frame(height: stage >= 2 ? 140 : 220)
+                    if stage >= 2 {
+                        TasteHero(profile: TasteProfile(store: store), showStats: false,
+                                  line: "You're \(article(gem.persona)) \(gem.persona). This decides what Odyssey shows you first, and it shifts as you save places and film them.")
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         HStack(spacing: 8) {
                             ForEach(Array(gem.traits.enumerated()), id: \.offset) { i, trait in
                                 chip(trait, gem.colors[i % gem.colors.count])
                             }
                         }
-                        Text("Your explorer type decides what Odyssey shows you first. It shifts as you save places and check in.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 8)
+                        .transition(.opacity)
                     }
-                    .opacity(shown ? 1 : 0)
-                    .offset(y: shown ? 0 : 14)
-                    adventure(pick)
-                        .opacity(cardShown ? 1 : 0)
-                        .offset(y: cardShown ? 0 : 24)
-                        .padding(.top, 6)
+                    if stage >= 3 {
+                        adventure(pick)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
             }
             Button {
@@ -653,19 +665,28 @@ struct OnboardingRevealStep: View {
                 }
             }
             .buttonStyle(AuthBigButtonStyle())
-            .opacity(cardShown ? 1 : 0)
+            .opacity(stage >= 3 ? 1 : 0)
+            .disabled(stage < 3)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22)
         .padding(.bottom, 24)
-        .onAppear {
+        .task {
             // Pin today's pick so Home reveals the same adventure (Home still keeps it sealed until you tap).
             if !store.dailyRevealed {
                 let pick = store.dailyPick()
                 store.update { s in s.dailyPickFor = AppState.DailyPick(date: Format.today(), placeId: pick.place.id) }
             }
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) { shown = true }
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.45)) { cardShown = true }
+            // Let the build-up land: the badge slams in and shakes, then the banner, then the adventure.
+            try? await Task.sleep(for: .milliseconds(250))
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) { stage = 1 }
+            Haptics.success()
+            withAnimation(.easeOut(duration: 0.9)) { burst = true }
+            try? await Task.sleep(for: .milliseconds(1600))
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) { stage = 2 }
+            Haptics.soft()
+            try? await Task.sleep(for: .milliseconds(1500))
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { stage = 3 }
         }
     }
 

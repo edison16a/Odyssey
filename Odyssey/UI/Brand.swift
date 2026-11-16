@@ -43,5 +43,5 @@ struct OdysseyWordmark: View {
 enum Brand {
     static let name = "Odyssey"
     static let motto = "Go Explore. Get Rewarded."
-    static let tagline = "Turn everyday life into an adventure."
+    static let tagline = "Find places you'll love, and make them easier to explore."
 }

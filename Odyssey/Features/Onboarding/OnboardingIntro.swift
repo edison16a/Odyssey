@@ -4,8 +4,8 @@
 //
 //  The first four screens of onboarding, which say what Odyssey is before
 //  asking for anything. Globie says hello, then the whole app in three
-//  moves: find a place, go and check in, get rewarded. The middle one is
-//  played, not read: the explorer taps record and "checks in" right there.
+//  moves: find a place, go and film it, get rewarded. The middle one is
+//  played, not read: the explorer taps record and films right there.
 //
 
 import Foundation
@@ -41,11 +41,11 @@ struct OnboardingHelloStep: View {
             }
             .padding(.bottom, 26)
             VStack(spacing: 10) {
-                Text("Odyssey turns going out into a game")
+                Text("Find places you'll love")
                     .font(.system(size: 30, weight: .bold))
                     .tracking(-0.9)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Visit real places. Earn real rewards.")
+                Text("Go there, film it, and get rewarded for helping the next person.")
                     .font(.system(size: 16))
                     .foregroundStyle(.white.opacity(0.75))
             }
@@ -79,11 +79,11 @@ struct OnboardingHowStep: View {
     var index: Int
     var next: () -> Void
 
-    /// The check-in on the second page: idle, filming, done.
+    /// The filming demo on the second page: idle, filming, done.
     @State private var filming = false
     @State private var filmed = false
 
-    private static let moves = ["Find", "Check in", "Earn"]
+    private static let moves = ["Find", "Film", "Earn"]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -120,7 +120,7 @@ struct OnboardingHowStep: View {
         }
     }
 
-    /// Find, Check in, Earn: three pills in a row with the current one lit.
+    /// Find, Film, Earn: three pills in a row with the current one lit.
     private var stepper: some View {
         HStack(spacing: 6) {
             ForEach(Array(Self.moves.enumerated()), id: \.offset) { i, name in
@@ -150,7 +150,7 @@ struct OnboardingHowStep: View {
     private var title: String {
         switch index {
         case 0: return "Find a place you'll love"
-        case 1: return "Go there and check in"
+        case 1: return "Go there and film it"
         default: return "Get rewarded"
         }
     }
@@ -158,15 +158,15 @@ struct OnboardingHowStep: View {
     private var sub: String {
         switch index {
         case 0: return "Every day Odyssey picks an adventure near you."
-        case 1: return "Film a quick look around. That is your proof you were there."
-        default: return "Coins, a daily streak and ranks. Be first at a place and your name stays on it."
+        case 1: return "A quick look around shows the next person what it is really like."
+        default: return "For helping the next person: coins, a streak, and your name on places you film first."
         }
     }
 
     private var button: String {
         switch index {
         case 0: return "Next"
-        case 1: return filming ? "Checking in…" : "Try a check-in"
+        case 1: return filming ? "Filming…" : "Try filming"
         default: return "I'm in"
         }
     }
@@ -176,7 +176,7 @@ struct OnboardingHowStep: View {
         if index == 1 && !filmed { film() } else { next() }
     }
 
-    /// A pretend check-in: the ring fills, the place is yours, on to the rewards.
+    /// A pretend video: the ring fills, the place is yours, on to the rewards.
     private func film() {
         guard !filming, !filmed else { return }
         Haptics.tap()
@@ -353,7 +353,7 @@ private struct HowCheckInPicture: View {
         }
         .buttonStyle(PressStyle(scale: 0.9))
         .disabled(filming)
-        .accessibilityLabel("Record a check-in")
+        .accessibilityLabel("Record a video")
     }
 
     /// Viewfinder corners.
@@ -374,7 +374,7 @@ private struct HowCheckInPicture: View {
     }
 }
 
-/// What a check-in pays: the coins count up, then streak, XP and first explorer land one by one.
+/// What a video pays: the coins count up, then streak, XP and first explorer land one by one.
 private struct HowEarnPicture: View {
     @State private var shown = false
     @State private var chips = 0
@@ -392,7 +392,7 @@ private struct HowEarnPicture: View {
                             .shadow(color: Palette.gold.opacity(0.6), radius: 18)
                         CountUpText(value: Rewards.checkIn.coins, duration: 1, prefix: "+")
                             .font(.system(size: 44, weight: .heavy, design: .rounded))
-                        Text("coins per check-in")
+                        Text("coins per video")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.7))
                     }
@@ -416,7 +416,7 @@ private struct HowEarnPicture: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Plus \(Rewards.checkIn.coins) coins per check-in, a daily streak, XP and a first explorer bonus")
+        .accessibilityLabel("Plus \(Rewards.checkIn.coins) coins per video, a daily streak, XP and a first explorer bonus")
     }
 
     private func chip(_ i: Int, _ symbol: String, _ text: String, _ color: Color) -> some View {

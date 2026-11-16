@@ -3,8 +3,8 @@
 //  Odyssey
 //
 //  The first run after signing in. It starts by saying what Odyssey is:
-//  Globie says hello, then the app in three moves (find a place, check in,
-//  get rewarded), with a check-in to try on the spot. Only then does it
+//  Globie says hello, then the app in three moves (find a place, film it,
+//  get rewarded), with a video to try on the spot. Only then does it
 //  ask for things: five quick taste questions, your location, and your
 //  photos (and optionally Google and Yelp), which get cut into your taste
 //  gem. It ends on your first adventure and hands off to the app, where

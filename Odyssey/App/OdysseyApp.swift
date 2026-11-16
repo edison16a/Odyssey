@@ -1,3 +1,4 @@
+import CoreLocation
 //
 //  OdysseyApp.swift
 //  Odyssey
@@ -41,6 +42,10 @@ struct OdysseyApp: App {
                 }
                 .onOpenURL { router.open($0, store: store) }
                 .onChange(of: scenePhase) { _, phase in
+                    // Back in the app: ask for location again if it was never answered.
+                    if phase == .active, location.authorization == .notDetermined, store.state.session.onboarded {
+                        location.request()
+                    }
                     if phase == .background {
                         location.flushSteps()
                         store.flush()

@@ -75,27 +75,46 @@ struct ProfileGlobeCard: View {
 }
 
 struct ProfileBusinessEntry: View {
+    @Environment(AppStore.self) private var store
     @Environment(AppRouter.self) private var router
+    /// Remembered with the other dismissed tips, so once closed it never comes back.
+    static let dismissKey = "profile-business"
 
     var body: some View {
-        Button { router.push(.business) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: Icon.symbol("store"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 40, height: 40)
-                    .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Own a business?").font(.system(size: 15, weight: .bold))
-                    Text("Put a bounty on walkthroughs of your place").font(.system(size: 11)).foregroundStyle(Palette.muted)
+        if !store.state.tipsSeen.contains(Self.dismissKey) {
+            HStack(spacing: 4) {
+                Button { router.push(.business) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: Icon.symbol("store"))
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 40, height: 40)
+                            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Own a business?").font(.system(size: 15, weight: .bold))
+                            Text("Put a bounty on walkthroughs of your place").font(.system(size: 11)).foregroundStyle(Palette.muted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.muted)
+                .buttonStyle(PressStyle(scale: 0.98))
+                Button {
+                    Haptics.tap()
+                    withAnimation(.easeOut(duration: 0.25)) { store.update { $0.tipsSeen.append(Self.dismissKey) } }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Palette.muted)
+                        .frame(width: 32, height: 32)
+                        .background(Palette.surface, in: Circle())
+                }
+                .accessibilityLabel("Hide this for good")
             }
             .foregroundStyle(Palette.ink)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface2, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
-        .buttonStyle(PressStyle(scale: 0.98))
     }
 }

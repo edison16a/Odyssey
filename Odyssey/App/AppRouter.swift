@@ -60,6 +60,7 @@ enum Route: Hashable {
     case demoGuide
     case admin
     case tasteProfile
+    case saved
 }
 
 /// Flows that cover the whole screen.

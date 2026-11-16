@@ -38,6 +38,7 @@ struct RouteView: View {
         case .demoGuide: DemoGuideView()
         case .admin: AdminView()
         case .tasteProfile: TasteProfileView()
+        case .saved: SavedPlacesView()
         }
     }
 }

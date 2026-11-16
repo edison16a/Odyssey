@@ -65,15 +65,24 @@ struct ExploreGlassChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon { Image(systemName: icon).font(.system(size: 10, weight: .semibold)) }
+            HStack(spacing: 6) {
+                if let icon {
+                    // A white symbol on a coloured dot, like the map's amenity pins.
+                    Image(systemName: icon)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(isOn ? Palette.accent : .white)
+                        .frame(width: 20, height: 20)
+                        .background(isOn ? Color.white : Palette.accent, in: Circle())
+                }
                 Text(label).font(.system(size: 12, weight: .semibold))
                 if let trailing { Image(systemName: trailing).font(.system(size: 9, weight: .bold)) }
             }
-            .padding(.horizontal, 10)
+            .padding(.leading, icon == nil ? 10 : 4)
+            .padding(.trailing, 10)
             .frame(height: 28)
-            .foregroundStyle(isOn ? Palette.ink : .white)
-            .background(isOn ? Color.white : ExploreChrome.fill, in: Capsule())
+            .foregroundStyle(isOn ? .white : Palette.ink)
+            .background(isOn ? Palette.accent : ExploreChrome.fill, in: Capsule())
+            .shadow(color: ExploreChrome.shadow, radius: 4, y: 1)
         }
         .buttonStyle(PressStyle(scale: 0.94))
         .animation(.easeOut(duration: 0.16), value: isOn)

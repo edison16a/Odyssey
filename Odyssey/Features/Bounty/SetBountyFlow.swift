@@ -32,7 +32,6 @@ struct SetBountyFlow: View {
     @State private var checking = false
     @State private var initialLoad = false
     @State private var quote: Cloud.BountyQuote?
-    @State private var showSignIn = false
 
     private var pool: Double {
         guard let value = Double(amount), value.isFinite else { return 0 }
@@ -63,14 +62,6 @@ struct SetBountyFlow: View {
             if let url = checkout?.url { SafariView(url: url).ignoresSafeArea() }
         }
         .sheet(isPresented: $showInfo) { BountyInfoSheet() }
-        .sheet(isPresented: $showSignIn) {
-            BountySignInSheet(email: store.state.session.email) { email in
-                store.update { $0.session.signedIn = true; $0.session.email = email }
-                showSignIn = false
-                next()
-            }
-            .presentationDetents([.medium])
-        }
         .onAppear {
             guard !initialLoad else { return }
             initialLoad = true
@@ -273,20 +264,14 @@ struct SetBountyFlow: View {
         if checkout != nil { showPay = true; return }
         guard valid, let selected else { return }
         error = nil
-        // Funding needs an account so the bounty and payout have an owner. A guest signs in here
-        // and funding carries on, instead of dead-ending on "Not signed in".
-        guard Cloud.shared.signedIn else { showSignIn = true; return }
+        // Guests can pay without an account; their bounty is published without an owner.
         working = true
         Task {
             do {
                 checkout = try await Cloud.shared.createBountyCheckout(build(selected))
                 showPay = true
             } catch {
-                if error.localizedDescription.localizedCaseInsensitiveContains("not signed in") {
-                    showSignIn = true
-                } else {
-                    self.error = error.localizedDescription
-                }
+                self.error = error.localizedDescription
             }
             working = false
         }
@@ -321,77 +306,4 @@ struct SafariView: UIViewControllerRepresentable {
     var url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
-}
-
-/// Email-code sign in, shown when a guest tries to fund a bounty.
-struct BountySignInSheet: View {
-    @State var email: String
-    var onDone: (String) -> Void
-    @State private var code = ""
-    @State private var sent = false
-    @State private var working = false
-    @State private var error: String?
-    @FocusState private var focused: Bool
-
-    private var emailOK: Bool { email.contains("@") && email.contains(".") }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Sign in to fund").font(.system(size: 22, weight: .bold)).foregroundStyle(Palette.ink)
-            Text(sent ? "Enter the 6-digit code we sent to \(email)."
-                      : "Bounties are paid through Whop, so they need an account. We'll email you a code.")
-                .font(.system(size: 14)).foregroundStyle(Palette.muted)
-            Group {
-                if sent {
-                    TextField("123456", text: $code)
-                        .keyboardType(.numberPad).textContentType(.oneTimeCode)
-                        .onChange(of: code) { _, value in
-                            code = String(value.filter(\.isNumber).prefix(6))
-                            if code.count == 6 { verify() }
-                        }
-                } else {
-                    TextField("you@example.com", text: $email)
-                        .keyboardType(.emailAddress).textContentType(.emailAddress)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .submitLabel(.send).onSubmit { send() }
-                }
-            }
-            .font(.system(size: 17)).foregroundStyle(Palette.ink).tint(Palette.accent).focused($focused)
-            .padding(.horizontal, 16).frame(height: 52)
-            .background(Palette.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            if let error { Text(error).font(.caption).foregroundStyle(Palette.danger) }
-            Button { sent ? verify() : send() } label: {
-                if working { ProgressView().tint(.white) } else { Text(sent ? "Verify and continue" : "Send code") }
-            }
-            .buttonStyle(.pill(.accent, fill: true))
-            .disabled(working || (sent ? code.count != 6 : !emailOK))
-            if sent {
-                Button("Use a different email") { sent = false; code = ""; error = nil }.font(.caption)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(24)
-        .onAppear { focused = true }
-    }
-
-    private func send() {
-        guard emailOK, !working else { return }
-        working = true; error = nil
-        Task {
-            do { try await Cloud.shared.sendCode(email: email.trimmingCharacters(in: .whitespaces)); sent = true; focused = true }
-            catch { self.error = error.localizedDescription }
-            working = false
-        }
-    }
-
-    private func verify() {
-        guard code.count == 6, !working else { return }
-        working = true; error = nil
-        let address = email.trimmingCharacters(in: .whitespaces)
-        Task {
-            do { try await Cloud.shared.verify(email: address, code: code); onDone(address) }
-            catch { self.error = "That code didn't work. Check it and try again."; code = "" }
-            working = false
-        }
-    }
 }

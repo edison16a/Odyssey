@@ -55,6 +55,12 @@ describe("bounty validation and allocation", () => {
   test.each([0, 2, 7.5, "7", -1, 365])("rejects invalid duration %s", (durationDays) => {
     expect(() => normalizeBounty(draft({ durationDays }))).toThrow();
   });
+  test("accepts the iOS app's [lat, lng] coordinates", () => {
+    const pair = [center.lat, center.lng];
+    const value = normalizeBounty(draft({ center: pair, target: { ...draft().target, place: { ...draft().target.place, coords: pair } } }));
+    expect(value.center).toEqual(center);
+    expect(value.target.place.coords).toEqual(center);
+  });
   test.each(["place", "street", "city"])("supports remote %s target without device GPS", (kind) => {
     const value = normalizeBounty(draft({ target: { ...draft().target, kind }, radius: kind === "city" ? 3000 : 120 }));
     expect(value.center).toEqual(center);
@@ -147,12 +153,24 @@ describe("Convex funding lifecycle", () => {
     const { owner } = await pending();
     await expect(owner.mutation(api.social.postBounty, { bounty: draft() })).rejects.toThrow("Only verified payments");
   });
-  test("checkout and status require authentication and are owner scoped", async () => {
+  test("a signed-in user's checkout is hidden from guests and other users", async () => {
     const { t, row } = await pending();
-    await expect(t.action(api.whop.createBountyCheckout, { bounty: draft() })).rejects.toThrow("Not signed in");
-    await expect(t.query(api.whop.bountyStatus, { bountyId: row.bountyId })).rejects.toThrow("Not signed in");
+    expect(await t.query(api.whop.bountyStatus, { bountyId: row.bountyId })).toMatchObject({ status: "missing" });
     const another = await t.run((ctx) => ctx.db.insert("users", {}));
     expect(await t.withIdentity({ subject: `${another}|other` }).query(api.whop.bountyStatus, { bountyId: row.bountyId })).toMatchObject({ status: "missing" });
+  });
+  test("guests can pay: the bounty is published without an owner", async () => {
+    const t = convexTest(schema, modules);
+    const row = await t.mutation(internal.whop.reserveCheckout, {
+      requestId: "guest-1", data: draft(), accountId: "biz_test", sandbox: true,
+    });
+    await t.mutation(internal.whop.attachCheckout, { bountyId: row.bountyId, checkoutId: "ch_guest", checkoutUrl: "https://sandbox.whop.com/test" });
+    expect(await t.query(api.whop.bountyStatus, { bountyId: row.bountyId })).toMatchObject({ status: "pending" });
+    const withCheckout = await t.run((ctx) => ctx.db.get(row._id));
+    expect(await t.mutation(internal.whop.markPaid, { bountyId: row.bountyId, payment: receipt(withCheckout!) })).toEqual({ ok: true });
+    const live = await t.run((ctx) => ctx.db.query("bounties").withIndex("by_bountyId", (q) => q.eq("bountyId", row.bountyId)).unique());
+    expect(live?.ownerId).toBeUndefined();
+    expect(await t.query(api.whop.bountyStatus, { bountyId: row.bountyId })).toMatchObject({ status: "paid" });
   });
   test("checkout retry reuses Whop resource; app return link never publishes", async () => {
     vi.stubEnv("WHOP_API_KEY", "test-key"); vi.stubEnv("WHOP_PLAN_ID", "plan_test"); vi.stubEnv("WHOP_ENVIRONMENT", "sandbox");

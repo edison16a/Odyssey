@@ -33,7 +33,7 @@ struct OnboardingLocationStep: View {
                 .foregroundStyle(.white.opacity(0.72))
             VStack(alignment: .leading, spacing: 10) {
                 point("map", "Shows places around you")
-                point("camera", "Proves your check-ins")
+                point("video", "Proves where you filmed")
                 point("lock.fill", "Private unless you post")
             }
             .padding(16)
